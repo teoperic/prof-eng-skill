@@ -1,0 +1,18 @@
+# Safety net: course material and anything derived from it must never be committed.
+slides/
+exams/
+homework/
+book/
+notes/
+solutions/
+cheatsheets/
+exam-sheet/
+.prof-eng-work/
+EXAM-SHEET.md
+EXAM-SHEET-print.md
+
+# Python and editor clutter
+__pycache__/
+*.pyc
+.obsidian/
+.DS_Store

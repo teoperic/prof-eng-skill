@@ -1,0 +1,9 @@
+| Command | What it does |
+|---|---|
+| `/prof-eng init` | Sets up the subject folder. Asks what you may bring to the exam (open or closed book, allowed aids), which tools Claude may use (Python, MATLAB, other) and whether the course follows a textbook. Then reads the first few lectures and proposes the course conventions (notation, units, methods, exam style), lecture IDs and homework mapping for your approval. Run once per subject. |
+| `/prof-eng notes [Lxx]` | Turns one lecture into a detailed study note. Without an argument it takes the next lecture that has no note yet. |
+| `/prof-eng lecture-cheatsheet [exam or Lxx] [--full]` | Adds one source to the lecture cheatsheets. A source is one past exam, or one lecture's homework and worked examples (`Lxx`), so courses without past exams still get cheatsheets. It solves and checks the source, then merges its problem types into the cheatsheet of the lecture each type belongs to. Without an argument it takes the next unprocessed exam, then the next lecture with unprocessed homework or examples. `--full` also rebuilds the formula section of every cheatsheet from the notes. |
+| `/prof-eng exam-sheet` | Builds what you may bring to the exam, following the exam rules from `init`: nothing for a closed-book exam, a LaTeX A4 sheet (1 or 2 pages) when a notes sheet is allowed, or an index that tells you which lecture cheatsheet to open for each type of question in an open-book exam. Rerun it after new notes or cheatsheet runs. |
+| `/prof-eng status` | Shows which lectures and exams are processed, what needs your review, changed source PDFs, an out-of-date exam sheet, version drift and any warnings. |
+| `/prof-eng check` | Verifies that all links and images resolve and every slide is covered by a note. |
+| `/prof-eng help` | Shows this table. |
