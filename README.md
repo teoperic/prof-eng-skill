@@ -21,14 +21,14 @@ A Claude Code skill that helps engineering students study one subject at a time.
 
 The repo is public, so you don't need a GitHub login or collaborator access to clone it.
 
-**Option A: let Claude do it.** Give Claude Code this prompt (replace `<REPO_URL>`):
+**Option A: let Claude do it.** Give Claude Code this prompt:
 
-> Clone the repository at `<REPO_URL>` into `~/prof-eng` (if it already exists, run `git pull` there instead). Then make the skill available to me by symlinking `~/prof-eng/skills/prof-eng` to `~/.claude/skills/prof-eng` (copy the folder instead if symlinks do not work on my system). Afterwards check that `~/.claude/skills/prof-eng/SKILL.md` exists and tell me whether I need to restart Claude Code for `/prof-eng` to appear.
+> Clone the repository at `https://github.com/teoperic/prof-eng.git` into `~/prof-eng` (if it already exists, run `git pull` there instead). Then make the skill available to me by symlinking `~/prof-eng/skills/prof-eng` to `~/.claude/skills/prof-eng` (copy the folder instead if symlinks do not work on my system). Afterwards check that `~/.claude/skills/prof-eng/SKILL.md` exists and tell me whether I need to restart Claude Code for `/prof-eng` to appear.
 
 **Option B: manual.** macOS/Linux:
 
 ```
-git clone <REPO_URL> ~/prof-eng
+git clone https://github.com/teoperic/prof-eng.git ~/prof-eng
 mkdir -p ~/.claude/skills
 ln -s ~/prof-eng/skills/prof-eng ~/.claude/skills/prof-eng
 ```
@@ -36,7 +36,7 @@ ln -s ~/prof-eng/skills/prof-eng ~/.claude/skills/prof-eng
 Windows (PowerShell):
 
 ```
-git clone <REPO_URL> $HOME\prof-eng
+git clone https://github.com/teoperic/prof-eng.git $HOME\prof-eng
 New-Item -ItemType Directory -Force $HOME\.claude\skills
 Copy-Item -Recurse $HOME\prof-eng\skills\prof-eng $HOME\.claude\skills\prof-eng
 ```
