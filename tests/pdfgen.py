@@ -27,7 +27,7 @@ def write_pdf(path, pages, size=(595, 842)):
     objects[3] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
     for i, page in enumerate(pages):
         lines = [page] if isinstance(page, str) else list(page)
-        ops = ["BT", "/F1 28 Tf", f"60 {height - 120} Td", "34 TL"]
+        ops = ["BT", "/F1 18 Tf", f"60 {height - 120} Td", "24 TL"]
         for line in lines:
             ops.append(f"({_escape(line)}) Tj T*")
         ops.append("ET")

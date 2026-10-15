@@ -33,7 +33,7 @@ LECTURES = {
 
 EXAM = [
     ["Exam 2023-jan", "Duration 90 min, 20 points", "Calculator allowed"],
-    ["Q1 (10 pts)", "R1 = 4 Ohm and R2 = 6 Ohm in series, u = 20 V.", "Find the current i."],
+    ["Q1 (10 pts)", "R1 = 4 Ohm and R2 = 6 Ohm in series.", "Applied voltage u = 20 V.", "Find the current i."],
     ["Q2 (10 pts)", "R = 2 kOhm, C = 5 uF.", "Find the time constant tau."],
 ]
 
@@ -44,7 +44,7 @@ EXAM_SOLUTION = [
 
 HOMEWORK = [
     ["Homework 1"],
-    ["P1: R1 = 3 Ohm, R2 = 5 Ohm in series, i = 1 A. Find u."],
+    ["P1: R1 = 3 Ohm, R2 = 5 Ohm in series.", "Current i = 1 A. Find the voltage u."],
 ]
 
 BOOK = [
