@@ -1,0 +1,35 @@
+% ===================== SETTINGS: edit here =====================
+\newcommand{\sheetfontsize}{7pt}     % font size (try 6pt-9pt)
+\newcommand{\sheetleading}{8pt}      % line spacing, about 1.15 x font size
+\newcommand{\sheetcolumns}{3}        % 2 or 3 columns
+\newcommand{\sheetpaper}{a4paper}    % paper size (a4paper unless the exam rules say otherwise)
+% ===============================================================
+\documentclass{article}
+\usepackage{geometry}
+\expandafter\geometry\expandafter{\sheetpaper,margin=6mm}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern,amsmath,amssymb,multicol}
+\setlength{\columnseprule}{0.2pt}
+\setlength{\columnsep}{3mm}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\pagestyle{empty}
+% \lecture{ID}{Name}: lecture heading in bold
+\newcommand{\lecture}[2]{\par\smallskip\textbf{#1 -- #2}\par}
+% \defn{Term}{text}: one compact definition line
+\newcommand{\defn}[2]{\par\textit{#1:} #2\par}
+\begin{document}
+\fontsize{\sheetfontsize}{\sheetleading}\selectfont
+% tight display math (set after \begin{document}, where \normalsize would reset them)
+\setlength{\abovedisplayskip}{1pt}
+\setlength{\belowdisplayskip}{1pt}
+\setlength{\abovedisplayshortskip}{0pt}
+\setlength{\belowdisplayshortskip}{0pt}
+\begin{multicols*}{\sheetcolumns}
+% ---- content: chronological by lecture, formulas and short definitions ----
+\lecture{L01}{Title}
+\defn{Term}{Short definition.}
+$a = b + c$ \quad (L01 §1)
+% ---- end of content ----
+\end{multicols*}
+\end{document}
