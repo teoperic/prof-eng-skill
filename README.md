@@ -23,27 +23,27 @@ The repo is public, so you don't need a GitHub login or collaborator access to c
 
 **Option A: let Claude do it.** Give Claude Code this prompt:
 
-> Clone the repository at `https://github.com/teoperic/prof-eng.git` into `~/prof-eng` (if it already exists, run `git pull` there instead). Then make the skill available to me by symlinking `~/prof-eng/skills/prof-eng` to `~/.claude/skills/prof-eng` (copy the folder instead if symlinks do not work on my system). Afterwards check that `~/.claude/skills/prof-eng/SKILL.md` exists and tell me whether I need to restart Claude Code for `/prof-eng` to appear.
+> Clone the repository at `https://github.com/teoperic/prof-eng-skill.git` into `~/prof-eng-skill` (if it already exists, run `git pull` there instead). Then make the skill available to me by symlinking `~/prof-eng-skill/skills/prof-eng` to `~/.claude/skills/prof-eng` (copy the folder instead if symlinks do not work on my system). Afterwards check that `~/.claude/skills/prof-eng/SKILL.md` exists and tell me whether I need to restart Claude Code for `/prof-eng` to appear.
 
 **Option B: manual.** macOS/Linux:
 
 ```
-git clone https://github.com/teoperic/prof-eng.git ~/prof-eng
+git clone https://github.com/teoperic/prof-eng-skill.git ~/prof-eng-skill
 mkdir -p ~/.claude/skills
-ln -s ~/prof-eng/skills/prof-eng ~/.claude/skills/prof-eng
+ln -s ~/prof-eng-skill/skills/prof-eng ~/.claude/skills/prof-eng
 ```
 
 Windows (PowerShell):
 
 ```
-git clone https://github.com/teoperic/prof-eng.git $HOME\prof-eng
+git clone https://github.com/teoperic/prof-eng-skill.git $HOME\prof-eng-skill
 New-Item -ItemType Directory -Force $HOME\.claude\skills
-Copy-Item -Recurse $HOME\prof-eng\skills\prof-eng $HOME\.claude\skills\prof-eng
+Copy-Item -Recurse $HOME\prof-eng-skill\skills\prof-eng $HOME\.claude\skills\prof-eng
 ```
 
 If `/prof-eng` does not show up, restart Claude Code.
 
-**Update:** run `git pull` in `~/prof-eng`. Symlink installs update immediately; Windows copy installs must copy the folder again. After an update, `/prof-eng status` in each subject reports version or template drift. Your `_templates/` are never overwritten.
+**Update:** run `git pull` in `~/prof-eng-skill`. Symlink installs update immediately; Windows copy installs must copy the folder again. After an update, `/prof-eng status` in each subject reports version or template drift. Your `_templates/` are never overwritten.
 
 ## Quick start
 
