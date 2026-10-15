@@ -125,4 +125,4 @@ This repo is public, so contributors must never commit slides, exams, homework, 
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
