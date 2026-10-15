@@ -3,6 +3,7 @@
 Standard library only. Used by make_fixtures.py and the tests; the content is
 always synthetic, never real course material.
 """
+import os
 import sys
 
 
@@ -51,6 +52,7 @@ def write_pdf(path, pages, size=(595, 842)):
     for num in range(1, total):
         out += f"{offsets[num]:010d} 00000 n \n".encode()
     out += f"trailer\n<< /Size {total} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n".encode()
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "wb") as fh:
         fh.write(out)
 
