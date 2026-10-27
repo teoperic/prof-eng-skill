@@ -16,7 +16,7 @@ SCRIPTS = os.path.join(os.path.dirname(HERE), "skills", "prof-eng", "scripts")
 sys.path.insert(0, HERE)
 sys.path.insert(0, SCRIPTS)
 
-from make_fixtures import make_subject  # noqa: E402
+from make_fixtures import SAMPLES, make_subject, write_samples  # noqa: E402
 from pdfgen import write_pdf  # noqa: E402
 import slide_pages  # noqa: E402
 
@@ -270,6 +270,33 @@ class FixturesTest(TempDirTest):
         self.assertEqual(len(os.listdir(os.path.join(root, "book"))), 1)
         count, _ = slide_pages.page_count(os.path.join(root, "slides", "L01-ohms-law.pdf"))
         self.assertEqual(count, 6)
+        self.assertFalse(os.path.exists(os.path.join(root, "CLAUDE.md")))  # init has not run yet
+
+    def test_samples_pass_the_checkers(self):
+        root = make_subject(self.tmp)
+        write_samples(root)
+        for script in ("check_links.py", "check_coverage.py"):
+            with self.subTest(script=script):
+                result = run(script, root)
+                self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("checked 1 notes: 0 with problems", run("check_coverage.py", root).stdout)
+        with open(os.path.join(root, "CLAUDE.md"), encoding="utf-8") as fh:
+            self.assertIn("\noutput_format: pdf\n", fh.read())
+
+    def test_command_line(self):
+        script = os.path.join(HERE, "make_fixtures.py")
+        plain = subprocess.run([sys.executable, script, os.path.join(self.tmp, "a")],
+                               capture_output=True, text=True, timeout=120)
+        self.assertEqual(plain.returncode, 0, plain.stderr)
+        self.assertFalse(os.path.exists(os.path.join(plain.stdout.strip(), "notes")))
+        samples = subprocess.run([sys.executable, script, os.path.join(self.tmp, "b"), "--with-samples"],
+                                 capture_output=True, text=True, timeout=120)
+        self.assertEqual(samples.returncode, 0, samples.stderr)
+        for rel in SAMPLES:
+            self.assertTrue(os.path.isfile(os.path.join(samples.stdout.strip(), rel)), rel)
+        usage = subprocess.run([sys.executable, script], capture_output=True, text=True, timeout=120)
+        self.assertEqual(usage.returncode, 2)
+        self.assertIn("--with-samples", usage.stderr)
 
 
 if __name__ == "__main__":

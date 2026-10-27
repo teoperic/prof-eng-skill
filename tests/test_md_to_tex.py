@@ -1,16 +1,15 @@
 """Tests for scripts/md_to_tex.py, the Markdown to LaTeX converter of the PDF output.
 
 Unit tests convert small Markdown snippets in a temporary subject folder and
-check the LaTeX body. The compile tests (skipped without LaTeX) convert a
-sample note, cheatsheet, exam solution and open-book index, compile them with
-the real template and check the log and the link targets in the PDFs.
+check the LaTeX body. The compile tests (skipped without LaTeX) convert the
+sample files of make_fixtures.py, compile them with the real template and
+check the log and the link targets in the PDFs.
 
 Run from the repo root: python3 -m unittest discover tests
 """
 import os
 import re
 import shutil
-import struct
 import subprocess
 import sys
 import tempfile
@@ -23,10 +22,11 @@ from urllib.parse import unquote
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.join(os.path.dirname(HERE), "skills", "prof-eng", "scripts")
 TEMPLATE = os.path.join(os.path.dirname(HERE), "skills", "prof-eng", "templates", "document.tex")
+FORMATTING = os.path.join(os.path.dirname(HERE), "skills", "prof-eng", "references", "formatting.md")
 sys.path.insert(0, HERE)
 sys.path.insert(0, SCRIPTS)
 
-from pdfgen import write_pdf  # noqa: E402
+from make_fixtures import SAMPLES, make_subject, write_png, write_samples  # noqa: E402
 import check_links  # noqa: E402
 import md_to_tex  # noqa: E402
 
@@ -35,17 +35,6 @@ def write(path, text, dedent=True):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(textwrap.dedent(text).lstrip("\n") if dedent else text)
-
-
-def write_png(path):
-    """A valid 4x4 white PNG (pdflatex reads the real image format)."""
-    def chunk(kind, data):
-        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
-    raw = b"".join(b"\x00" + b"\xff" * 12 for _ in range(4))
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "wb") as fh:
-        fh.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 4, 4, 8, 2, 0, 0, 0))
-                 + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
 
 
 def run(*args, cwd=None):
@@ -435,6 +424,65 @@ class UnsupportedTest(TempSubjectTest):
         self.assertIn("snake\\_case\\_name", self.body("# T\n\nsnake_case_name\n"))
 
 
+class NotSupportedListTest(TempSubjectTest):
+    """formatting.md's "Not supported" list and the converter's messages stay in sync."""
+    ITEMS = {  # item of the list -> Markdown that shows it
+        "wikilinks and embeds": ["[[L06-z]]", "![[img.png]]"],
+        "plain `>` quotes": ["> quoted"],
+        "other callout types": ["> [!danger] Careful"],
+        "`==highlight==`": ["a ==marked== word"],
+        "`~~strikethrough~~`": ["~~gone~~"],
+        "`_italic_` (use `*italic*`)": ["_italic_ word"],
+        "footnotes": ["text[^1]"],
+        "HTML and HTML comments": ["line<br>break", "<!-- hidden -->"],
+        "autolinks `<https://…>` (use `[text](url)`)": ["<https://example.org>"],
+        "`%%` comments": ["%% comment %%"],
+        "task lists `- [ ]`": ["- [ ] task"],
+        "reference links `[text][ref]`": ["[text][ref]", "[ref]: https://example.org"],
+        "underlined (setext) headings": ["Title\n==="],
+        "`#####` and deeper": ["##### Deep"],
+        "headings inside a list or callout": ["- item\n  ## Inside", "> [!note] T\n> ## Inside"],
+        "images inside a sentence or from a URL": ["text ![pic](img/a.png) inline",
+                                                   "![pic](https://example.org/a.png)"],
+        "image paths with spaces": ["![pic](img/a%20b.png)"],
+        "`$$` inside a line of text": ["inline $$x$$ math"],
+        "LaTeX environments outside `$$`": ["\\begin{align} x \\end{align}"],
+        "characters that are neither built into pdflatex nor declared in the template "
+        "(for example Chinese, emoji, rare symbols)": ["汉", "🙂"],
+    }
+    # messages about broken syntax rather than an unsupported construct: not in the list
+    MALFORMED = ("never closed", "cells under a header", "delimiter row", "unmatched $", "\\end{codebox}")
+
+    def errors(self):
+        """{snippet: error messages}; the image file exists, so only its path is wrong."""
+        write_png(os.path.join(self.subject, "notes", "img", "a b.png"))
+        return {snippet: self.convert(f"# T\n\nFine line.\n\n{snippet}\n")[1]
+                for snippets in self.ITEMS.values() for snippet in snippets}
+
+    def test_list_matches_items(self):
+        with open(FORMATTING, encoding="utf-8") as fh:
+            sentence = re.search(r"^Not supported: (.*?)\. ", fh.read(), re.M).group(1)
+        items = [re.sub(r"^and ", "", item) for item in re.split(r",\s*(?![^()]*\))", sentence)]
+        self.assertEqual(sorted(items), sorted(self.ITEMS))
+
+    def test_each_item_is_rejected(self):
+        for snippet, errors in self.errors().items():
+            with self.subTest(snippet=snippet):
+                self.assertEqual(len(errors), 1, errors)
+
+    def test_each_converter_message_is_listed(self):
+        with open(os.path.join(SCRIPTS, "md_to_tex.py"), encoding="utf-8") as fh:
+            calls = re.findall(r"self\.unsupported\([^,]+,\s*f?\"([^\n]*)", fh.read())
+        whats = [call for call in calls if not any(m in call for m in self.MALFORMED)]
+        whats += [what for _, what in md_to_tex.UNSUPPORTED]
+        reported = [e for errors in self.errors().values() for e in errors]
+        for what in whats:
+            prefix = "unsupported Markdown: " + re.split(r"[{:\"]", what)[0]
+            with self.subTest(message=what):
+                self.assertTrue(any(e.startswith(prefix) for e in reported),
+                                "no ITEMS snippet triggers it; list it in formatting.md or in MALFORMED")
+
+
 class CommandLineTest(TempSubjectTest):
     def test_default_output_and_fallback_template(self):
         write(os.path.join(self.subject, "notes", "L07-x.md"), "# T\n\nOk.\n")
@@ -479,141 +527,6 @@ class CommandLineTest(TempSubjectTest):
 
 # ---- compile tests ----
 
-NOTE = """\
----
-course: Demo Circuits & Systems
-lecture: 2
-title: RC circuits
-status: draft        # draft | reviewed
-tags: [lecture]
----
-# L02 – RC circuits
-
-> [!abstract] Summary
-> The capacitor voltage follows a step with time constant $\\tau = RC$ (see [§2](#2.%20Step%20response)).
-
-## Learning objectives
-- Derive the **step response**; compute *time constants* with µs, Ω, °C, τ ≈ 1 ms.
-  - nested item with $x_1$
-- Use `tau` and the #hashtag & under_score.
-
-## Core content
-### 1. Time constant
-(Slides 2–3: [slide 2](../slides/L02.pdf#page=2))
-
-The time constant is defined by
-
-$$
-\\tau = R\\,C
-$$
-
-The [cheatsheet card](../cheatsheets/L02-cheatsheet.md#R2%20–%20Time%20constant%20of%20an%20RC%20circuit) and [a site](https://example.org/a_b?x=1&y=2#frag).
-
-> [!important] Key result
-> The time constant is $\\tau = RC$.
-
-$$
-\\begin{aligned}
-u(t) &= U_0\\,(1 - e^{-t/\\tau}) \\\\
-i(t) &= \\frac{U_0}{R}\\, e^{-t/\\tau}
-\\end{aligned}
-$$
-
-> [!question] Slide 3: the exponent is unreadable.
-
-Figure (slide 3): an RC circuit. [Slide 3](../slides/L02.pdf#page=3)
-
-![Slide 3](img/L02-s03.png)
-
-```matlab
-R = 1e3; C = 1e-6;
-tau = R*C   % 1 ms
-```
-
-```mermaid
-graph LR
-  A[Input] --> B[RC]
-```
-
----
-
-### 2. Step response
-1. First step.
-2. Second step.
-
-## Formula box
-| Formula | Meaning | Section |
-|---|---|---|
-| $\\tau = RC$ | time constant | [1. Time constant](#1.%20Time%20constant) |
-
-## Self-test
-1. What is $\\tau$ for $R = 1\\,\\text{k}\\Omega$, $C = 1\\,\\mu\\text{F}$, and $τ_1, …, τ_n$ – in µs?
-
-> [!tip]- Answer
-> $\\tau = 1\\,\\text{ms}$.
-
-## Slide coverage
-| Slides | Section |
-|---|---|
-""" + "".join(f"| {n} | 1. Time constant |\n" for n in range(1, 21))
-
-CHEATSHEET = """\
-# L02 – RC circuits – cheatsheet
-> [!info] Built from: 1 exams. Note: [L02 – RC circuits](../notes/L02-rc-circuits.md)
-
-## Recipes
-### R2 – Time constant of an RC circuit
-**Frequency:** 1 of 1 exams · typically 10 pts
-**Recognize it:** the question gives $R$ and $C$ and asks for $\\tau$.
-**Steps:**
-1. Write $\\tau = RC$.
-2. Convert units.
-
-**Key formulas:** $\\tau = RC$
-**Go deeper:** [L02 – 1. Time constant](../notes/L02-rc-circuits.md#1.%20Time%20constant)
-**Confidence:** algebra-checked
-
-## Conflicts
-None so far.
-"""
-
-SOLUTION = """\
----
-exam: 2023-jan
-status: reviewed
-questions: 1
----
-# Exam 2023-jan – solutions
-
-> [!tip] Try each question before scrolling to its solution.
-
-## Questions
-### Q1 (10 pts) – type R2
-**Statement:** $R = 2\\,\\text{k}\\Omega$, $C = 5\\,\\mu\\text{F}$. Find $\\tau$. Figure: [page 3](../exams/2023-jan.pdf#page=3)
-
-## Solutions
-### Q1 solution
-**Lectures:** [L02 – 1. Time constant](../notes/L02-rc-circuits.md#1.%20Time%20constant)
-**Solution:**
-1. $\\tau = RC = 10\\,\\text{ms}$.
-
-**Check:** units Ω·F = s, [the check](checks/2023-jan-Q1.py).
-**Confidence:** matches-solution
-"""
-
-EXAM_SHEET = """\
-# Demo – exam sheet (open book)
-
-## Find the right cheatsheet
-| If the question asks for … | Type | Frequency | Go to |
-|---|---|---|---|
-| $\\tau$ from $R$ and $C$ | R2 | 1 of 1 exams | [L02 cheatsheet – R2](cheatsheets/L02-cheatsheet.md#R2%20–%20Time%20constant%20of%20an%20RC%20circuit) |
-"""
-
-SAMPLES = {"notes/L02-rc-circuits.md": NOTE, "cheatsheets/L02-cheatsheet.md": CHEATSHEET,
-           "solutions/exam-2023-jan.md": SOLUTION, "EXAM-SHEET.md": EXAM_SHEET}
-
-
 def latex_tool():
     return shutil.which("latexmk") or shutil.which("pdflatex")
 
@@ -650,12 +563,11 @@ def pdf_objects(pdf):
 class CompileTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.subject = tempfile.mkdtemp(prefix="prof-eng-md2tex-compile-")
-        write_pdf(os.path.join(cls.subject, "slides", "L02.pdf"), [f"Slide {n}" for n in range(1, 21)])
-        write_png(os.path.join(cls.subject, "notes", "img", "L02-s03.png"))
+        cls.tmp = tempfile.mkdtemp(prefix="prof-eng-md2tex-compile-")
+        cls.subject = make_subject(cls.tmp)
+        write_samples(cls.subject)
         cls.results = {}
-        for rel, text in SAMPLES.items():
-            write(os.path.join(cls.subject, rel), text, dedent=False)
+        for rel in SAMPLES:
             with mock.patch("md_to_tex.shutil.which", return_value=None):  # same output with or without mmdc
                 converted = run(rel, cwd=cls.subject)
             if converted.returncode:
@@ -665,7 +577,7 @@ class CompileTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.subject)
+        shutil.rmtree(cls.tmp)
 
     def test_compiles_without_warnings(self):
         for rel, (code, log, _) in self.results.items():
@@ -686,8 +598,8 @@ class CompileTest(unittest.TestCase):
 
     def test_slide_link_opens_page(self):
         objects = pdf_objects(self.results["notes/L02-rc-circuits.md"][2])
-        self.assertIn(b"/F(../../slides/L02.pdf)", objects)
-        self.assertIn(b"/GoToR/D[1/Fit]", objects)  # page 2, counted from 0
+        self.assertIn(b"/F(../../slides/L02-rc-circuits.pdf)", objects)
+        self.assertIn(b"/GoToR/D[2/Fit]", objects)  # page 3, counted from 0
 
     def test_supported_characters_compile(self):
         # every character the converter lets through, in text; the declared ones also in math

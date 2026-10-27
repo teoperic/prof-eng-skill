@@ -115,6 +115,14 @@ class DocumentTemplateTest(unittest.TestCase):
         self.assertLess(text.index("%%BODY%%"), text.index("\\end{document}"))
 
 
+class ClaudeTemplateTest(unittest.TestCase):
+    def test_output_format_field(self):
+        with open(os.path.join(SKILL, "templates", "CLAUDE.md"), encoding="utf-8") as fh:
+            text = fh.read()
+        frontmatter = text.split("---")[1]
+        self.assertRegex(frontmatter, r"\noutput_format: unset +# markdown \| pdf \| unset")
+
+
 class NoCourseMaterialTest(unittest.TestCase):
     def test_no_pdfs_or_images_in_repo(self):
         found = []

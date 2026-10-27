@@ -3,7 +3,7 @@
 Unit tests feed the log and page checks with synthetic input and run the
 command line without LaTeX on PATH (file selection, converter errors, the
 not-compiled case). The compile tests (skipped without LaTeX and poppler)
-build the sample files of test_md_to_tex.py and Markdown made to trigger each
+build the sample files of make_fixtures.py and Markdown made to trigger each
 layout problem.
 
 Run from the repo root: python3 -m unittest discover tests
@@ -23,8 +23,8 @@ TEMPLATE = os.path.join(os.path.dirname(HERE), "skills", "prof-eng", "templates"
 sys.path.insert(0, HERE)
 sys.path.insert(0, SCRIPTS)
 
-from pdfgen import write_pdf  # noqa: E402
-from test_md_to_tex import SAMPLES, write, write_png  # noqa: E402
+from make_fixtures import SAMPLES, make_subject, write_samples  # noqa: E402
+from test_md_to_tex import write  # noqa: E402
 import build_pdf  # noqa: E402
 
 
@@ -229,10 +229,7 @@ TALL_CALLOUT = ("# L03 – gap\n\n" + "".join(f"Paragraph {n} with some words in
 @unittest.skipUnless(*NEEDS_TOOLS)
 class CompileTest(TempSubjectTest):
     def test_samples_build_clean(self):
-        write_pdf(os.path.join(self.subject, "slides", "L02.pdf"), [f"Slide {n}" for n in range(1, 21)])
-        write_png(os.path.join(self.subject, "notes", "img", "L02-s03.png"))
-        for rel, text in SAMPLES.items():
-            self.add(rel, text)
+        write_samples(make_subject(self.subject, name="."))
         result = run("--all", cwd=self.subject)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(set(statuses(result.stdout).values()), {"ok"}, result.stdout)
