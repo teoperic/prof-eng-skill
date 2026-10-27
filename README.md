@@ -15,7 +15,8 @@ A Claude Code skill that helps engineering students study one subject at a time.
 - [Claude Code](https://docs.claude.com/en/docs/claude-code/overview).
 - [Obsidian](https://obsidian.md): open each subject folder as a vault. Other Markdown viewers show callouts and `#page=` slide links incorrectly.
 - Python 3, recommended: used for link checks, code checks of solutions and change detection. Optional Python packages: `sympy` (symbolic checks), `pypdf` (exact page counts), `PyMuPDF` (slide pictures).
-- Optional: poppler (`pdftoppm`) or PyMuPDF to embed pictures of complex slide figures in the notes; a LaTeX distribution with `latexmk` (TeX Live, MiKTeX or MacTeX) to compile the A4 notes sheet, or compile the `.tex` in [Overleaf](https://www.overleaf.com); MATLAB, if you choose it at `init`.
+- Optional: poppler (`pdftoppm`) or PyMuPDF to embed pictures of complex slide figures in the notes; a LaTeX distribution with `latexmk` (TeX Live, MiKTeX or MacTeX) to compile the A4 notes sheet and the [PDF output](#pdf-output), or compile the `.tex` in [Overleaf](https://www.overleaf.com); MATLAB, if you choose it at `init`.
+- Optional, for PDF output: poppler's `pdftotext` and `pdfinfo` to check the page breaks of each PDF, and the Mermaid CLI (`mmdc`) to draw Mermaid diagrams in the PDFs.
 
 ## Install
 
@@ -50,19 +51,20 @@ If `/prof-eng` does not show up, restart Claude Code.
 1. Create a folder for the subject (no spaces in the name, for example `Signals-and-Systems`).
 2. Inside it, create `slides/` and put the lecture PDFs there. Put past exams in `exams/`, homework sheets in `homework/` and the textbook, if the course follows one, in `book/`.
 3. Open the folder as an Obsidian vault.
-4. Open Claude Code in that folder and run `/prof-eng init`. Answer its questions: what you may bring to the exam, which aids are allowed, which tools Claude may use, whether there is a textbook. Then confirm the lecture IDs and homework mapping and approve the conventions it extracted (or edit `CLAUDE.md` first).
+4. Open Claude Code in that folder and run `/prof-eng init`. Answer its questions: what you may bring to the exam, which aids are allowed, which tools Claude may use, whether there is a textbook, and whether you want PDFs as well as Markdown. Then confirm the lecture IDs and homework mapping and approve the conventions it extracted (or edit `CLAUDE.md` first).
 5. Run `/prof-eng notes`.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `/prof-eng init` | Sets up the subject folder. Asks what you may bring to the exam (open or closed book, allowed aids), which tools Claude may use (Python, MATLAB, other) and whether the course follows a textbook. Then reads the first few lectures and proposes the course conventions (notation, units, methods, exam style), lecture IDs and homework mapping for your approval. Run once per subject. |
+| `/prof-eng init` | Sets up the subject folder. Asks what you may bring to the exam (open or closed book, allowed aids), which tools Claude may use (Python, MATLAB, other), whether the course follows a textbook and whether you want PDFs next to the Markdown files. Then reads the first few lectures and proposes the course conventions (notation, units, methods, exam style), lecture IDs and homework mapping for your approval. Run once per subject. |
 | `/prof-eng notes [Lxx]` | Turns one lecture into a detailed study note. Without an argument it takes the next lecture that has no note yet. |
 | `/prof-eng lecture-cheatsheet [exam or Lxx] [--full]` | Adds one source to the lecture cheatsheets. A source is one past exam, or one lecture's homework and worked examples (`Lxx`), so courses without past exams still get cheatsheets. It solves and checks the source, then merges its problem types into the cheatsheet of the lecture each type belongs to. Without an argument it takes the next unprocessed exam, then the next lecture with unprocessed homework or examples. `--full` also rebuilds the formula section of every cheatsheet from the notes. |
 | `/prof-eng exam-sheet` | Builds what you may bring to the exam, following the exam rules from `init`: nothing for a closed-book exam, a LaTeX A4 sheet (1 or 2 pages) when a notes sheet is allowed, or an index that tells you which lecture cheatsheet to open for each type of question in an open-book exam. Rerun it after new notes or cheatsheet runs. |
-| `/prof-eng status` | Shows which lectures and exams are processed, what needs your review, changed source PDFs, an out-of-date exam sheet, version drift and any warnings. |
+| `/prof-eng status` | Shows which lectures and exams are processed, what needs your review, changed source PDFs, an out-of-date exam sheet, missing or outdated PDFs, version drift and any warnings. |
 | `/prof-eng check` | Verifies that all links and images resolve and every slide is covered by a note. |
+| `/prof-eng pdf [file\|all]` | Rebuilds the PDF versions of notes, cheatsheets, solutions and the open-book index (only if you chose PDF output at `init`). Without an argument it rebuilds the missing and outdated PDFs, `all` rebuilds every one, and a file name rebuilds that file. Runs scripts only, so it uses almost none of your Claude usage. |
 | `/prof-eng help` | Shows this table. |
 
 ## Weekly routine
@@ -86,7 +88,19 @@ If `/prof-eng` does not show up, restart Claude Code.
   ```
 
   The skill never changes the font size itself; it suggests one in its report if the sheet is far over or under the page budget.
-- **Open book:** `EXAM-SHEET.md`, an index that tells you, for each type of question, which lecture cheatsheet and recipe card to open. The first time, it asks whether you also want `EXAM-SHEET-print.md`, a version without links that you can print from Obsidian.
+- **Open book:** `EXAM-SHEET.md`, an index that tells you, for each type of question, which lecture cheatsheet and recipe card to open. The first time, it asks whether you also want `EXAM-SHEET-print.md`, a version without links that you can print from Obsidian. With PDF output, both also come as ready-to-print PDFs in `pdf/`.
+
+## PDF output
+
+If you choose "Markdown + PDF" at `init` (or later set `output_format: pdf` in the subject's `CLAUDE.md`), every note, cheatsheet, solution file and open-book index also gets a PDF, compiled locally with LaTeX:
+
+- The PDFs live in `pdf/`, which mirrors the folder layout: `notes/L07-laplace-transform.md` becomes `pdf/notes/L07-laplace-transform.pdf`.
+- 12pt on A4, with page breaks that keep headings with their text, callouts and short tables in one piece, and equations with the sentence that introduces them.
+- Links stay clickable: slide links open the slide PDF at that page, and links to other notes or cheatsheets open their PDF at that heading. Self-test answers move to an "Answers" section at the end, with page references for paper.
+- The Markdown stays the source. Each PDF is rebuilt from it after every run that changes the file; `/prof-eng pdf` rebuilds missing or outdated PDFs without using Claude for the content.
+- To change the layout, edit the settings block at the top of `_templates/document.tex` in the subject folder (font size, paper, margins, line spacing), then run `/prof-eng pdf`. Never edit the generated `.tex` files in `pdf/`; they are overwritten on every build.
+
+Without LaTeX, the skill still writes the `.tex` files and `/prof-eng status` lists them as not compiled. You can compile them in Overleaf: upload the `.tex` together with the images it uses (`notes/img/`, `solutions/img/`, and `.prof-eng-build/mermaid/` for drawn diagrams), keeping the same folder layout.
 
 ## Confidence flags
 
@@ -111,13 +125,13 @@ Every run reads a whole lecture or exam as PDF pages (plus some textbook pages a
 
 ## Copyright and privacy
 
-This repo is public, so contributors must never commit slides, exams, homework, books, notes, images or solutions from real courses. Subject folders get a `.gitignore` for the source material, but notes, slide images, cheatsheets and solutions are derived from copyrighted material too: keep subject folders out of any public repo, and share notes only if your university allows it.
+This repo is public, so contributors must never commit slides, exams, homework, books, notes, images or solutions from real courses. Subject folders get a `.gitignore` for the source material, but notes, slide images, cheatsheets, solutions and their PDFs are derived from copyrighted material too: keep subject folders out of any public repo, and share notes only if your university allows it.
 
 ## Limitations
 
 - Notes follow the professor's notation and may contain errors. Open the note next to the slides when you study.
 - Handwritten or low-quality scans, which are common for past exams, may be misread.
-- The page fit of the LaTeX sheet is only checked when LaTeX is installed.
+- The page fit of the LaTeX sheet is only checked when LaTeX is installed, and the page breaks of the PDFs only when LaTeX and poppler are installed.
 
 ## Development
 

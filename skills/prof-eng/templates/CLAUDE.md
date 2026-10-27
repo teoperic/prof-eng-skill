@@ -1,6 +1,6 @@
 ---
 skill: prof-eng
-skill_version: 1.0
+skill_version: 1.1
 conventions_status: draft   # change to approved after reviewing
 language: English
 runtime: unset              # python | python+matlab | other: <tools> | unset
@@ -11,6 +11,7 @@ page_budget:                # 1 or 2 for a notes sheet; blank otherwise
 exam_aids: unset            # [none] or any of [calculator, matlab, "other: <text>"]; or unset
 print_version: unasked      # unasked | yes | no (open-book sheet only)
 book: none                  # none | pending | book/<file>.pdf
+output_format: unset        # markdown | pdf | unset (unset means markdown)
 ---
 Use the `prof-eng` skill for all work in this folder.
 
