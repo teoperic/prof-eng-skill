@@ -1,7 +1,7 @@
 ---
 name: prof-eng
-description: Turns lecture slides into detailed Obsidian-style study notes, builds per-lecture cheatsheets from past exams and homework, and produces the sheet you may bring to the exam, one lecture or exam at a time. Use inside a single-subject folder with /prof-eng init, notes, lecture-cheatsheet, exam-sheet, status, check, help.
-argument-hint: "init | notes [Lxx] | lecture-cheatsheet [exam or Lxx] [--full] | exam-sheet | status | check | help"
+description: Turns lecture slides into detailed Obsidian-style study notes, builds per-lecture cheatsheets from past exams and homework, and produces the sheet you may bring to the exam, one lecture or exam at a time. Use inside a single-subject folder with /prof-eng init, notes, lecture-cheatsheet, exam-sheet, status, check, pdf, help.
+argument-hint: "init | notes [Lxx] | lecture-cheatsheet [exam or Lxx] [--full] | exam-sheet | status | check | pdf [file|all] | help"
 ---
 # prof-eng
 
@@ -14,15 +14,17 @@ Skill directory: `${CLAUDE_SKILL_DIR}`. (If that still reads as a literal `${...
 - `SKILL_DIR/references/commands.md`: the commands table (help text).
 - `SKILL_DIR/references/formatting.md`: how every file is formatted. Read it before writing any note, solution, cheatsheet or exam sheet.
 - `SKILL_DIR/references/verification.md`: how solutions are checked and labelled. Read it before solving anything.
-- `SKILL_DIR/templates/`: file templates; `init` copies them to `_templates/` in the subject folder. Always fill the subject's `_templates/` copy (the user may have edited it); fall back to `SKILL_DIR/templates/` only if the copy is missing, and say so in the report.
+- `SKILL_DIR/templates/`: file templates; `init` copies them to `_templates/` in the subject folder. Always fill the subject's `_templates/` copy (the user may have edited it); fall back to `SKILL_DIR/templates/` only if the copy is missing, and say so in the report. `document.tex` is the LaTeX preamble of every PDF (rule 16); `build_pdf.py` finds the subject's copy itself.
 - `SKILL_DIR/scripts/`: Python 3 helpers. Run them as `python3 "SKILL_DIR/scripts/<name>.py" …` (use `python` if `python3` is not found).
   - `slide_pages.py <pdf> [--chunk N]`: page count, chunk ranges, 12-character SHA-256.
   - `render_page.py <pdf> <page> <out.png> [--dpi 150]`: exit 2 means no renderer is installed.
   - `check_links.py [folder]`, `check_coverage.py [folder]`: exit 1 means problems were found.
+  - `build_pdf.py <file.md>… | --stale [<file.md>…] | --all`: writes `pdf/<path>.tex`, compiles `pdf/<path>.pdf` and checks its layout. One line per file, `<file.md>: ok | layout-warnings | failed | not-compiled`, with its problems indented below. Exit 0 all ok; 1 a file `failed` or has `layout-warnings`; 2 no LaTeX installed (the `.tex` is still written).
+  - `md_to_tex.py <file.md>`: the Markdown-to-LaTeX step `build_pdf.py` runs. Exit 1 lists Markdown outside the PDF subset as `file:line` errors.
 
 ## Dispatch
 
-The first word of the arguments is the subcommand: `init`, `notes`, `lecture-cheatsheet`, `exam-sheet`, `status`, `check`, `help`. The rest are its arguments.
+The first word of the arguments is the subcommand: `init`, `notes`, `lecture-cheatsheet`, `exam-sheet`, `status`, `check`, `pdf`, `help`. The rest are its arguments.
 
 - No arguments, or `help`: print the contents of `SKILL_DIR/references/commands.md` as is, and stop.
 - Unknown subcommand: print one line ("Unknown command `<word>`."), then the help, and stop.
@@ -34,7 +36,7 @@ The first word of the arguments is the subcommand: `init`, `notes`, `lecture-che
 2. **Gate.** `notes`, `lecture-cheatsheet` and `exam-sheet` need `conventions_status: approved` in `CLAUDE.md`. If it is `draft`, ask with the question tool (AskUserQuestion): "Approve the conventions in `CLAUDE.md` now" (write `approved` and continue) or "I'll edit `CLAUDE.md` first" (stop). `lecture-cheatsheet` also needs `runtime`, `exam_format` and `exam_aids` set (not `unset`); `exam-sheet` needs `exam_format` and `exam_aids`. For each unset field, ask the matching init question (see init step 3), store the answer and continue. Without the question tool, stop and name the file and the field or value to change.
 3. **Source fidelity.** Use the course's notation, symbols and methods (`CLAUDE.md` Conventions). Content found neither in the slides nor in the book goes in `> [!info] Added context (not in slides)`. Content from the book goes in `> [!info] From the book (p. N)` with a link to the book page (rule 14).
 4. **No guessing.** Unreadable or ambiguous content becomes `> [!question] …` stating what is unclear, never an invented value.
-5. **Figures.** Describe every figure in words (components, labels, values, what it shows) and link its page. Redraw only simple figures (as a table or Mermaid). Never redraw complex circuits, plots or block diagrams: render the page with `render_page.py` to `notes/img/Lxx-sNN.png` (slide NN, two digits) and embed it directly under the description (`![Slide 14](img/L07-s14.png)`). Figures in exam or homework statements: same, rendered to `solutions/img/<source>-pNN.png`. If `render_page.py` exits with 2, keep the description and the page link, and say in the report that no renderer is installed.
+5. **Figures.** Describe every figure in words (components, labels, values, what it shows) and link its page. Redraw only simple figures (as a table or Mermaid; with PDF output a table, rule 16). Never redraw complex circuits, plots or block diagrams: render the page with `render_page.py` to `notes/img/Lxx-sNN.png` (slide NN, two digits) and embed it directly under the description (`![Slide 14](img/L07-s14.png)`). Figures in exam or homework statements: same, rendered to `solutions/img/<source>-pNN.png`. If `render_page.py` exits with 2, keep the description and the page link, and say in the report that no renderer is installed.
 6. **Conflicts.** Where slides and an exam (or two sources) disagree on a method or notation, add a `> [!warning] Conflict` callout showing both versions with their sources.
 7. **Formatting and verification.** Follow `SKILL_DIR/references/formatting.md` and `SKILL_DIR/references/verification.md`.
 8. **Reading PDFs.** Get the page count, chunk ranges and hash with `slide_pages.py`. Read PDFs with the Read tool in chunks of at most 15 pages (`pages: "1-15"`; the tool takes at most 20 pages per call and needs `pages` for PDFs over 10 pages). After each chunk, write what you extracted to `.prof-eng-work/<target>/` (target: the lecture id, the exam name, or `exam-sheet`) and tick the step in `.prof-eng-work/<target>/run.md`. These files are the input of the generator and the resume point if the run is cut off. They do not shrink this session's context, so do not reread pages you have already extracted.
@@ -45,6 +47,12 @@ The first word of the arguments is the subcommand: `init`, `notes`, `lecture-che
 13. **Progress.** Record every state change in `progress.md`, including the hash of each processed source PDF and of the book.
 14. **Book** (only if `book` in `CLAUDE.md` is a file path). Never read the whole book. Use the chapter table in `00-index.md` to find the pages that belong to the current lecture or question, and read at most 30 book pages per run, in chunks (rule 8). Use the book for what the slides leave out: derivations the slides skip, worked examples the slides take from the book and their solutions, definitions the slides assume. The slides stay the authority on notation and methods; where the book differs, use the slides' version and add a `> [!warning] Conflict` callout. Link book pages by PDF page: `[book p. 123](../book/<file>.pdf#page=135)`, using the offset in `00-index.md`. If `book` is `pending`, remind the user to add the PDF to `book/` and continue without it.
 15. **Generate, then verify.** In `notes` and `lecture-cheatsheet`, once extraction (rule 8) and all user questions are done, start a **generator** sub-agent (Agent tool, general-purpose) that writes the output files, then a second, fresh **verifier** sub-agent that checks them. Use the prompts in "Sub-agent prompts" below. The verifier only reports. You (the main session) fix what it reports, then run at most one more verifier pass. Problems still open after that go in the run report and lower the affected confidence to `uncertain` (and the note stays `status: draft`). Sub-agents run strictly one after another, never in parallel, and never ask the user anything. If the Agent tool is unavailable, do both steps yourself, in the same order, and reread the source pages for the verification step.
+16. **PDF output** (only with `output_format: pdf` in `CLAUDE.md`; missing or `unset` means `markdown`). Notes, cheatsheets, `solutions/exam-*.md`, `solutions/hw-Lxx.md`, `EXAM-SHEET.md` and `EXAM-SHEET-print.md` also get a PDF at the same path under `pdf/` (`notes/L07-x.md` → `pdf/notes/L07-x.pdf`). Write them within the PDF subset of formatting.md ("PDF output"). Once the in-scope `.md` files a run changed are final (after rule 15's fixes), run `build_pdf.py <files>` on them. The `.tex` is regenerated on every build: never edit it, fix the `.md`. Fixes change syntax or structure, never meaning.
+    - `failed`: converter errors name the `.md` line; compile errors quote the `.tex` text, so find the same text in the `.md`. Fix and rebuild.
+    - `layout-warnings`: restructure only, never cut or reword: split a long callout or table, break an overlong word, URL or code span, move a figure. A heading at the bottom of a page cannot be fixed in the `.md` (it is a `_templates/document.tex` problem): report it.
+    - At most 3 fix-and-rebuild rounds per file; report what is still wrong.
+    - `not-compiled` (exit 2): report it with the script's advice (install LaTeX, or Overleaf with the images uploaded in the same folder layout).
+    - Record each built file in the `## PDF` table of `progress.md` (add the section from `SKILL_DIR/templates/progress.md` if missing): file, build date, status, open problems. One row per file, replaced on rebuild.
 
 ### Dates, IDs and names
 
@@ -56,9 +64,9 @@ The first word of the arguments is the subcommand: `init`, `notes`, `lecture-che
 
 ## `/prof-eng init`
 
-Idempotent: if the folder is already initialized, never overwrite `CLAUDE.md` or `_templates/`. Report what already exists and only fill in what is missing (including settings that are `unset`).
+Idempotent: if the folder is already initialized, never overwrite `CLAUDE.md` or `_templates/`. Report what already exists and only fill in what is missing (including settings that are `unset`, or absent because the subject was set up by an older version, such as `output_format`).
 
-1. Create `slides/ exams/ homework/ book/ notes/ notes/img/ solutions/ solutions/img/ solutions/checks/ cheatsheets/ _templates/` and a `.gitignore` with the lines `slides/`, `exams/`, `homework/`, `book/`, `.prof-eng-work/`. Copy every file of `SKILL_DIR/templates/` into `_templates/` without overwriting existing files.
+1. Create `slides/ exams/ homework/ book/ notes/ notes/img/ solutions/ solutions/img/ solutions/checks/ cheatsheets/ _templates/` and a `.gitignore` with the lines `slides/`, `exams/`, `homework/`, `book/`, `.prof-eng-work/`, `.prof-eng-build/` (add missing lines to an existing one). Copy every file of `SKILL_DIR/templates/` into `_templates/` without overwriting existing files.
 2. If `slides/` has no PDF: stop and tell the user to add the first lecture's PDF to `slides/` and run `/prof-eng init` again.
 3. Setup questions, one question tool call with these four questions:
    - **Exam rules** "Open or closed book?" (single-select): Fully closed book → `exam_format: closed`; Single-sided A4 sheet of notes → `a4-single`, `page_budget: 1`; Double-sided A4 sheet of notes → `a4-double`, `page_budget: 2`; Fully open book → `open`. "Other" (free text): map it with the user in a follow-up question to one of: no sheet (`closed`), a LaTeX notes sheet (ask paper size and page count → `paper`, `page_budget`, and `a4-single` for 1 page or `a4-double` for 2), or an open-book index (`open`). Store the user's own words in `exam_format_note`.
@@ -67,8 +75,9 @@ Idempotent: if the folder is already initialized, never overwrite `CLAUDE.md` or
    - **Book** "Do the slides rely heavily on a textbook?" (single-select): Yes / No (→ `book: none`).
 
    If the book answer is yes: one PDF in `book/` → `book: book/<file>.pdf`; several → ask which one is the course book; none → ask the user to put it in `book/` now, with options "Added it" (check, then continue) and "Later" (`book: pending`).
-   Then check the chosen tools: `python3 --version`, and `matlab -batch "disp(1)"` for MATLAB. If a chosen tool is missing, keep the setting, warn the user, and say that checks will fall back to hand checks (verification.md §3).
-   Without the question tool, write all four fields as `unset`, continue, and list them in the report.
+   Then a second question tool call: **Output format** "Output format?" (single-select): Markdown only → `output_format: markdown`; Markdown + PDF (compiled with LaTeX) → `pdf`. For `pdf`, create `pdf/`.
+   Then check the chosen tools: `python3 --version`, `matlab -batch "disp(1)"` for MATLAB, and `latexmk --version` (or `pdflatex --version`) for `pdf`. If a chosen tool is missing, keep the setting and warn the user: checks fall back to hand checks (verification.md §3); without LaTeX, the `.tex` files are still written and marked "not compiled" until LaTeX (TeX Live, MacTeX, MiKTeX) is installed or the files are compiled on Overleaf.
+   Without the question tool, write all five fields as `unset`, continue, and list them in the report (`output_format: unset` means Markdown only).
 4. Inventory the slide PDFs (natural sort). Propose an id for each (see "Dates, IDs and names"), get page counts and hashes with `slide_pages.py`.
 5. Extract conventions from **at most the first 3 lectures** (chunked reads, rule 8; target `init`): a symbol/notation table (symbol, meaning, first lecture), units and constants, terminology (original term in brackets if not English), the method the professor teaches for each problem type, and anything the slides say about the exam. Read **at most 1 exam** for exam style: the most recent one (by year in the name, otherwise the last in natural sort): question format, point distribution, duration, allowed material.
 6. Book (if present): read its table of contents, plus the first pages of the index only if the contents are not enough (at most 20 pages in total). Write the chapter table to `00-index.md` (chapter, title, printed pages, PDF pages, lectures) with the offset between printed and PDF page numbers, and propose which chapters belong to which lectures.
@@ -102,7 +111,7 @@ Conventions grow as lectures arrive: `notes` asks about each new or conflicting 
 6. **Slide coverage.** The note ends with `## Slide coverage`: every slide mapped to the section that covers it. Slides skipped on purpose (title, agenda, thank-you) are rows `skipped (<reason>)`.
 7. **Length.** Aim for 10–25k characters; a longer note stays one file.
 8. **Check.** Run `check_coverage.py .` and `check_links.py .`, then the verifier (rule 15). Fix what they report. LaTeX self-check: balanced `$` and `$$`, no multiline math inside callouts, no `\tag`.
-9. **Finish.** Update `00-index.md` (title, topics, prerequisites, note link) and `progress.md` (source, hash, note, `draft`). If a cheatsheet for this lecture already has a formula section from an older version of the note, flag it in `progress.md` (`Formulas in cheatsheet: outdated`). Delete `.prof-eng-work/<Lxx>/`. Report the convention decisions from step 3 and any figures that could not be rendered, and remind the user to review the note next to the slides and set `status: reviewed`.
+9. **Finish.** Update `00-index.md` (title, topics, prerequisites, note link) and `progress.md` (source, hash, note, `draft`). If a cheatsheet for this lecture already has a formula section from an older version of the note, flag it in `progress.md` (`Formulas in cheatsheet: outdated`). Build the note's PDF (rule 16). Delete `.prof-eng-work/<Lxx>/`. Report the convention decisions from step 3 and any figures that could not be rendered, and remind the user to review the note next to the slides and set `status: reviewed`.
 
 ## `/prof-eng lecture-cheatsheet [exam or Lxx] [--full]`
 
@@ -118,7 +127,7 @@ Grows the lecture cheatsheets (`cheatsheets/Lxx-cheatsheet.md`) one source at a 
    - updates the cheatsheets (created from `_templates/lecture-cheatsheet.md` the first time): new or changed recipe cards for the types this source touched, in their home lecture's cheatsheet; the **Frequency** line of every card in every cheatsheet refreshed from the catalog, cards ordered by frequency; the formula section added where missing or replaced where `progress.md` marks it outdated (with `--full`: rebuilt in every cheatsheet from all notes, plus a formula-only cheatsheet for every lecture with a note but no cheatsheet); `> [!warning] Conflict` callouts where this source disagrees with the lectures or an earlier source;
    - writes card contents for `exam_aids`: `none` → every step doable by hand, with any table values the method needs; `calculator` → numeric steps are fine; `matlab` → a short **MATLAB:** line where MATLAB helps; other → follow `exam_format_note` and the user's text. Cards are self-sufficient (steps and formulas written out); links point to the deeper explanation. Courses without past exams get cards from lecture sources, with confidence no higher than `consistent-with-lectures` unless a code check ran, and a frequency line that says "from homework and examples only";
    - rebuilds `## Gaps` in `progress.md` from the catalog: exam topics weak or missing in the notes, lectures without a note, `uncertain` solutions, homework skipped as `graded`.
-5. **Check.** Run `check_links.py .`, then the verifier (rule 15), and fix what they report. Update `progress.md` (source, hash, question count, uncertain count, cheatsheets touched; `Formulas in cheatsheet` per lecture). Delete `.prof-eng-work/<target>/`.
+5. **Check.** Run `check_links.py .`, then the verifier (rule 15), and fix what they report. Update `progress.md` (source, hash, question count, uncertain count, cheatsheets touched; `Formulas in cheatsheet` per lecture). Build the PDFs (rule 16) of the solution file and of every cheatsheet (every Frequency line was refreshed). Delete `.prof-eng-work/<target>/`.
 6. **Report:** a table of every question-to-type assignment (question, type ID, home lecture, one-line reason) so the user can correct any; new and updated types; `uncertain` solutions to spot-check; and a reminder to rerun `/prof-eng exam-sheet` if one exists. If the user corrects an assignment in the same session, update the catalog and the affected cheatsheets.
 
 ## `/prof-eng exam-sheet`
@@ -135,7 +144,7 @@ Builds what the student may bring to the exam, from the notes, the cheatsheets a
      - Page budget: `page_budget`. If `latexmk` or `pdflatex` is installed, compile in `exam-sheet/` (`latexmk -pdf -interaction=nonstopmode -halt-on-error exam-sheet.tex`, or `pdflatex` the same way; auxiliary files stay in `exam-sheet/`), count pages with `slide_pages.py`, and while over budget drop the lowest-priority items: first formulas used by no recipe card's **Key formulas**, then those of the lowest-frequency types. Never change the font size yourself; if the sheet is far over or under budget, suggest a font size in the report. List dropped items in the report, not in the file. If compiling fails, read the log, fix the LaTeX and recompile. Without LaTeX, write only the `.tex`, report the fit as unchecked, and tell the user to compile it (for example in Overleaf).
    - **`open`**: build `EXAM-SHEET.md` from `_templates/exam-sheet.md`: for each problem type, ordered by frequency, what the question looks like (from **Recognize it**), the type ID and frequency, and a link to its card; then the by-lecture table (lecture, cheatsheet link, note link), "When stuck", and the Gaps from `progress.md`. If no cheatsheets exist yet, list the notes by lecture and say that recipes appear after `lecture-cheatsheet` runs.
 3. **Print version** (open book only). If `print_version` is `unasked`, ask whether the user wants a print version and store `yes` or `no`. If `yes`, write `EXAM-SHEET-print.md`: the index followed by all lecture cheatsheets in lecture order, with no links (plain references such as "L07 cheatsheet, R3" or "L07 §2"), no images, no collapsed callouts and no "Go deeper" lines. Without the question tool, make no print version and say how to turn it on (`print_version: yes`).
-4. Run `check_links.py .` (open format). Record in `progress.md`: build date, format, pages / budget, fit (or "unchecked"), dropped items, and the notes and cheatsheets it was built from (with their modification dates). Delete `.prof-eng-work/exam-sheet/`. Report what was built, what was dropped and anything unchecked.
+4. Run `check_links.py .` (open format), then build the PDFs (rule 16) of `EXAM-SHEET.md` and, with `print_version: yes`, `EXAM-SHEET-print.md`. Record in `progress.md`: build date, format, pages / budget, fit (or "unchecked"), dropped items, and the notes and cheatsheets it was built from (with their modification dates). Delete `.prof-eng-work/exam-sheet/`. Report what was built, what was dropped and anything unchecked.
 
 ## `/prof-eng status`
 
@@ -146,13 +155,23 @@ Report only; change nothing. Read `progress.md`, `CLAUDE.md`, `00-index.md` and 
 - the Gaps section and the warnings from the last checks;
 - **changed sources:** run `slide_pages.py` on every processed source PDF and the book and compare the hash with `progress.md`. For each change, name the affected note, solution or cheatsheet and the command to rerun. Without Python, use `sha256sum` or `shasum -a 256` (first 12 characters); if neither works, say change detection is unavailable;
 - **out-of-date exam sheet:** a note or cheatsheet modified after the exam sheet's build date in `progress.md`. Suggest `/prof-eng exam-sheet`;
+- **PDFs** (only with `output_format: pdf`): in-scope `.md` files whose PDF is missing or older than the `.md` or the subject's `_templates/document.tex` (compare modification times), and files marked `not-compiled` or `failed` in the `## PDF` table of `progress.md`. Suggest `/prof-eng pdf`;
 - **interrupted runs:** leftover `.prof-eng-work/<target>/` folders, with the command that resumes each;
-- **version drift:** the subject's `skill_version` differs from `SKILL_DIR/templates/CLAUDE.md`, or files in `_templates/` differ from `SKILL_DIR/templates/` (compare with `diff -q`, ignoring `CLAUDE.md`). List the differing files only; never overwrite them (they may be the user's edits);
+- **version drift:** the subject's `skill_version` differs from `SKILL_DIR/templates/CLAUDE.md`, or files in `_templates/` differ from `SKILL_DIR/templates/` (compare with `diff -q`, ignoring `CLAUDE.md`; an older `document.tex` still builds, but `build_pdf.py` skips its page checks). List the differing files only; never overwrite them (they may be the user's edits);
 - the suggested next command.
 
 ## `/prof-eng check`
 
 Run `check_links.py .` and `check_coverage.py .` and summarize the results (counts, then each problem). Report only; do not fix.
+
+## `/prof-eng pdf [file|all]`
+
+Rebuilds PDFs from the existing Markdown. A script run: no extraction, no sub-agents.
+
+1. Subject folder only (rule 1); no conventions gate. If `output_format` is not `pdf`, say that PDF output is off and that `output_format: pdf` in `CLAUDE.md` turns it on, and stop.
+2. No argument → `build_pdf.py --stale` (PDF missing, or older than its `.md` or the document template); `all` → `build_pdf.py --all`; a file → `build_pdf.py <file>`.
+3. Record the results in `progress.md` (rule 16).
+4. Report each file's status and problems. Change no `.md` on your own: for `failed` or `layout-warnings`, show the fixes rule 16 allows and ask whether to apply them. If yes, apply them, rebuild (at most 3 rounds), and update `progress.md`.
 
 ## `/prof-eng help`
 
@@ -160,7 +179,7 @@ Print `SKILL_DIR/references/commands.md` as is.
 
 ## Sub-agent prompts
 
-Fill in the `<…>` parts and pass the whole prompt to the Agent tool. Give paths as absolute paths.
+Fill in the `<…>` parts and pass the whole prompt to the Agent tool. Give paths as absolute paths. Include a sentence marked *(PDF)* only with `output_format: pdf`, without the mark.
 
 **Generator (notes):**
 
@@ -168,7 +187,7 @@ Fill in the `<…>` parts and pass the whole prompt to the Agent tool. Give path
 >
 > Inputs: the slide extractions in `<subject>/.prof-eng-work/<Lxx>/` (chunk files and, if present, `book.md`), the slide PDF `<pdf>` (read pages with the Read tool, at most 15 per call, if an extraction is unclear), the subject conventions in `<subject>/CLAUDE.md`, the template `<subject>/_templates/lecture-note.md`, and the rules in `<SKILL_DIR>/references/formatting.md`. Rendered images available: `<list of notes/img/... files, or "none">`. Convention decisions: `<one-off items to mark in the note>`.
 >
-> Write `<subject>/notes/<Lxx-slug>.md`. Plan the outline first (topics in slide order), then write it section by section: definitions, derivations step by step in the course's notation, the slides' worked examples, `[slide N](../slides/<file>.pdf#page=N)` links, figure descriptions with the rendered image under each complex figure, a Formula box, 3–5 self-test questions with collapsed answers, related lectures, and the `## Slide coverage` table covering every slide. Mark content from the book and added context as formatting.md shows. Do not solve homework. Aim for 10–25k characters.
+> Write `<subject>/notes/<Lxx-slug>.md`. Plan the outline first (topics in slide order), then write it section by section: definitions, derivations step by step in the course's notation, the slides' worked examples, `[slide N](../slides/<file>.pdf#page=N)` links, figure descriptions with the rendered image under each complex figure, a Formula box, 3–5 self-test questions with collapsed answers, related lectures, and the `## Slide coverage` table covering every slide. Mark content from the book and added context as formatting.md shows. Do not solve homework. Aim for 10–25k characters. *(PDF)* A PDF is built from this file: stay within the Markdown subset in the "PDF output" section of formatting.md, and redraw simple figures as tables rather than Mermaid.
 >
 > When done, reply with: the file written, its length in characters, and a list of anything you were unsure about (slide numbers).
 
@@ -178,7 +197,7 @@ Fill in the `<…>` parts and pass the whole prompt to the Agent tool. Give path
 >
 > Inputs: the extracted questions in `<subject>/.prof-eng-work/<target>/`, the source PDF `<pdf>` (pages via the Read tool, at most 15 per call), the solution file `<path or "none">` (read it only after you have solved every question), the notes in `<subject>/notes/`, `<subject>/CLAUDE.md` (conventions; `runtime` and `exam_aids`), the catalog `<subject>/solutions/problem-types.md`, the existing cheatsheets in `<subject>/cheatsheets/`, the templates in `<subject>/_templates/`, and the rules in `<SKILL_DIR>/references/verification.md` and `formatting.md`. Homework status: `<solve | graded: statements and types only>`.
 >
-> Do, in order: <the bullet list of lecture-cheatsheet step 4, copied in>. Save each code check to `<subject>/solutions/checks/` and run it with the tools `runtime` allows.
+> Do, in order: <the bullet list of lecture-cheatsheet step 4, copied in>. Save each code check to `<subject>/solutions/checks/` and run it with the tools `runtime` allows. *(PDF)* PDFs are built from the solution file and the cheatsheets: stay within the Markdown subset in the "PDF output" section of formatting.md, and redraw simple figures as tables rather than Mermaid.
 >
 > When done, reply with: files written or changed; a table of every question with its type ID, home lecture, one-line reason and confidence; new and changed types; and anything you were unsure about.
 
@@ -188,6 +207,6 @@ Fill in the `<…>` parts and pass the whole prompt to the Agent tool. Give path
 >
 > Files to check: `<list>`. Source: `<pdf>` (read the pages with the Read tool, at most 15 per call) and the extractions in `<subject>/.prof-eng-work/<target>/`. Rules: `<SKILL_DIR>/references/formatting.md` and `verification.md`.
 >
-> Check: every slide is covered and the coverage table is right; every formula is transcribed correctly (compare with the page, symbol by symbol); every `Given` line matches the PDF value by value; each final result, recomputed independently; LaTeX hygiene (balanced `$`, no multiline math in callouts, no `\tag`); every citation points to a section that exists and teaches that step; every confidence label matches what was actually run (verification.md §5).
+> Check: every slide is covered and the coverage table is right; every formula is transcribed correctly (compare with the page, symbol by symbol); every `Given` line matches the PDF value by value; each final result, recomputed independently; LaTeX hygiene (balanced `$`, no multiline math in callouts, no `\tag`); every citation points to a section that exists and teaches that step; every confidence label matches what was actually run (verification.md §5). *(PDF)* Also flag Markdown outside the subset in the "PDF output" section of formatting.md.
 >
 > Reply with a numbered list of problems, each as `file:line – what is wrong – what the source says`, most serious first; or "No problems found." Do not report style preferences.

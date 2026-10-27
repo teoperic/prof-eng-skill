@@ -21,6 +21,12 @@
 | Built | Format | Pages / budget | Fit | Dropped | Built from |
 |---|---|---|---|---|---|
 
+## PDF
+| File | Built | Status | Open problems |
+|---|---|---|---|
+
+(Status: ok | layout-warnings | failed | not-compiled)
+
 ## Gaps
 
 ## Warnings
