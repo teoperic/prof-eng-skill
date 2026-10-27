@@ -30,7 +30,9 @@
   destlabel]{hyperref}% destlabel: \label{x} names the PDF destination x, so other PDFs can link to it
 \linespread{\doclinespread}
 \makeatletter
-\AtBeginDocument{\typeout{prof-eng: fontsize=\f@size}}
+\AtBeginDocument{\typeout{prof-eng: fontsize=\f@size}%
+  \typeout{prof-eng: textarea top=\the\dimexpr1in+\voffset+\topmargin+\headheight+\headsep\relax
+    \space height=\the\textheight}}% build_pdf.py checks the page layout inside this area
 \makeatother
 
 % ---- page breaks: no widows/orphans, no stretched space, no lonely headings ----
@@ -50,9 +52,15 @@
 % ---- headings: ## = \section, ### = \subsection, #### = \subsubsection ----
 % Unnumbered (the Markdown headings carry their own numbers) but bookmarked.
 \setcounter{secnumdepth}{0}
-\titleformat{\section}{\Large\bfseries}{}{0pt}{}
-\titleformat{\subsection}{\large\bfseries}{}{0pt}{}
-\titleformat{\subsubsection}{\normalsize\bfseries}{}{0pt}{}
+\titleformat{\section}{\Large\bfseries}{}{0pt}{\docheadingmark}
+\titleformat{\subsection}{\large\bfseries}{}{0pt}{\docheadingmark}
+\titleformat{\subsubsection}{\normalsize\bfseries}{}{0pt}{\docheadingmark}
+% \docheadingmark{title}: the title, then a log line with its page and the height of its
+% last baseline, so build_pdf.py can find headings left at the bottom of a page
+\makeatletter
+\newcommand{\docheadingmark}[1]{#1\pdfsavepos
+  \write-1{prof-eng-heading: page=\the\c@page\space y=\the\pdflastypos}}
+\makeatother
 \titlespacing*{\section}{0pt}{1.4\baselineskip}{0.3\baselineskip}
 \titlespacing*{\subsection}{0pt}{1.1\baselineskip}{0.2\baselineskip}
 \titlespacing*{\subsubsection}{0pt}{0.9\baselineskip}{0.1\baselineskip}
