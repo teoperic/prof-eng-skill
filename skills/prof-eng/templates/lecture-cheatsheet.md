@@ -2,7 +2,7 @@
 > [!info] Built from: <N> exams, <M> lectures' homework. Last updated: <YYYY-MM-DD>. Note: [<Lxx> – <Title>](../notes/<Lxx-slug>.md)
 
 ## Recipes
-(one card per problem type whose home lecture is <Lxx>, ordered by frequency, most frequent first)
+%% one card per problem type whose home lecture is <Lxx>, ordered by frequency, most frequent first %%
 
 ### R3 – Step response of a 2nd-order system
 **Frequency:** 5 of 6 exams · typically 15–20 pts
@@ -20,11 +20,11 @@
 **Confidence:** algebra-checked | matches-solution | consistent-with-lectures | uncertain
 
 ## Formulas and constants
-(this lecture's Formula box, each formula linked to its note section)
+%% this lecture's Formula box, each formula linked to its note section %%
 
 | Formula | Meaning | Section |
 |---|---|---|
 | $…$ | … | [<Lxx> §1](../notes/<Lxx-slug>.md#1.%20Topic) |
 
 ## Conflicts
-(`> [!warning] Conflict` callouts where a source disagrees with the lecture or an earlier source; "None so far." if empty)
+%% `> [!warning] Conflict` callouts where a source disagrees with the lecture or an earlier source; "None so far." if empty %%

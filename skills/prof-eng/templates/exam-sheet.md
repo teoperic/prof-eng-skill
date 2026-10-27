@@ -26,4 +26,4 @@
 - Move on and come back: points are per question.
 
 ## Gaps
-(copied from the Gaps section of `progress.md`: topics where the cheatsheets are thin or missing)
+%% copied from the Gaps section of `progress.md`: topics where the cheatsheets are thin or missing %%

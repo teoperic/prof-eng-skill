@@ -59,6 +59,7 @@ Figure (slide 14): components, labels, values and what the figure shows, written
 > Short answer.
 
 ## Related lectures
+%% link only lectures that already have a note; name later ones in plain text (L08 – Title) %%
 - [<Lzz> – <Title>](<Lzz-slug>.md): how it connects.
 
 ## Slide coverage
