@@ -1,0 +1,788 @@
+#!/usr/bin/env python3
+"""Convert one prof-eng Markdown file to LaTeX for its PDF version.
+
+Usage: md_to_tex.py <file.md> [--subject DIR] [--out FILE.tex]
+
+Files with a PDF version (paths relative to the subject folder, default: the
+current directory): notes/*.md, cheatsheets/*.md, solutions/exam-*.md,
+solutions/hw-L*.md, EXAM-SHEET.md, EXAM-SHEET-print.md. The output goes to
+pdf/<same path>.tex unless --out is given. The preamble is the subject's
+_templates/document.tex, or the skill's templates/document.tex if that copy is
+missing (said on stderr); the body replaces its %%BODY%% line.
+
+Only the Markdown subset of references/formatting.md is converted: frontmatter,
+headings # to ####, paragraphs (every line is its own paragraph, as Obsidian
+shows it), **bold**, *italic*, `code`, lists, pipe tables, ---, $...$ and
+$$...$$ (passed through unchanged), callouts, images on their own line, fenced
+code and relative or http(s) links. Collapsed `> [!tip]- Answer` callouts move
+to an Answers section at the end. Headings R<n> – ... and Q<n> solution become
+recipe cards and solution boxes. Mermaid blocks are drawn with mmdc if it is
+installed, otherwise shown as source. Links to another file with a PDF version
+point to that PDF (pdf/ mirrors the Markdown tree); other relative targets
+point back into the Markdown tree.
+
+Exit codes: 0 written; 1 Markdown outside the subset or a broken image or
+anchor (one `file:line: problem` line each on stderr, nothing written);
+2 usage error (missing file, file without a PDF version, unusable template).
+"""
+import argparse
+import datetime
+import os
+import re
+import shutil
+import subprocess
+import sys
+from urllib.parse import unquote
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from check_links import HEADING_RE, INLINE_CODE_RE, LINK_RE, SCHEME_RE, anchor_key  # noqa: E402
+
+SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+IN_SCOPE_RE = re.compile(r"(notes/[^/]+|cheatsheets/[^/]+|solutions/exam-[^/]+|solutions/hw-L[^/]+"
+                         r"|EXAM-SHEET|EXAM-SHEET-print)\.md")
+CALLOUT_TYPES = ("note", "abstract", "important", "example", "warning", "question", "info", "tip")
+LONG_TABLE_ROWS = 15  # more body rows: xltabular with a repeated header
+SECTIONS = {2: "section", 3: "subsection", 4: "subsubsection"}
+RECIPE_RE = re.compile(r"R\d+\s+[–-]\s")
+SOLUTION_RE = re.compile(r"Q\d+\S*\s+solution\b", re.I)
+LISTINGS = {"matlab": "Matlab", "octave": "Octave", "python": "Python", "py": "Python", "c": "C",
+            "cpp": "C++", "c++": "C++", "java": "Java", "bash": "bash", "sh": "sh", "r": "R",
+            "sql": "SQL", "tex": "TeX", "latex": "TeX"}
+
+FENCE_RE = re.compile(r"^(\s*)(`{3,}|~{3,})\s*([^`\s]*)\s*$")
+LIST_RE = re.compile(r"^(\s*)([-*+]|\d{1,9}[.)])(?:\s+(.*))?$")
+HR_RE = re.compile(r"^\s{0,3}([-*_])(?:\s*\1){2,}\s*$")
+SETEXT_RE = re.compile(r"^\s*(=+|-{2,})\s*$")
+DELIM_RE = re.compile(r"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$")
+CALLOUT_RE = re.compile(r"^\[!([^\]]*)\]([-+]?)\s*(.*)$")
+CODE_SPAN_RE = re.compile(r"(`+)(.+?)(?<!`)\1(?!`)")
+BOLD_ITALIC_RE = re.compile(r"\*\*\*(?=\S)(.+?)(?<=\S)\*\*\*")
+BOLD_RE = re.compile(r"\*\*(?=\S)(.+?)(?<=\S)\*\*")
+ITALIC_RE = re.compile(r"(?<!\*)\*(?=[^\s*])(.+?)(?<=[^\s*])\*(?!\*)")
+PLACEHOLDER_RE = re.compile("\x00(\\d+)\x00")
+ASCII_PUNCT = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+UNSUPPORTED = [(re.compile(p), what) for p, what in (
+    (r"!\[\[", "embed ![[...]]: use ![alt](relative/path.png)"),
+    (r"(?<!!)\[\[", "wikilink [[...]]: use [text](relative/path.md)"),
+    (r"\[\^", "footnote [^...]"),
+    (r"==\S", "highlight ==...=="),
+    (r"~~", "strikethrough ~~...~~"),
+    (r"<!--", "HTML comment"),
+    (r"<(?:https?|mailto):[^>\s]*>", "autolink <...>: use [text](url)"),
+    (r"</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?/?>", "raw HTML"),
+    (r"%%", "Obsidian comment %%...%%"),
+    (r"(?<![\w\\])_(?=[^\s_])[^_]*?[^\s_]_(?!\w)", "_italic_: use *italic*"),
+    (r"\]\[", "reference link [text][ref]: use [text](target)"),
+)]
+TEXT_ESCAPES = {"\\": r"\textbackslash{}", "{": r"\{", "}": r"\}", "$": r"\$", "&": r"\&",
+                "#": r"\#", "%": r"\%", "_": r"\_", "~": r"\textasciitilde{}",
+                "^": r"\textasciicircum{}", "`": r"\textasciigrave{}"}
+# Characters pdflatex prints with T1/TS1 and utf8 input (TeX Live 2025); the template's
+# \DeclareUnicodeCharacter lines add more.
+BUILTIN_CHARS = (set(map(chr, range(0x20, 0x7F))) | set(map(chr, range(0xA0, 0x180)))) \
+    - set(map(chr, (0x126, 0x127, 0x138, 0x13F, 0x140, 0x149, 0x166, 0x167, 0x17F))) \
+    | set("ƒȘșȚț‐‑‒–—―‘’‚“”„†‡•…‰‹›€™")
+DECLARED_RE = re.compile(r"^\s*\\DeclareUnicodeCharacter\{([0-9A-Fa-f]{4,6})\}", re.M)
+
+
+class Block:
+    """One block of the Markdown: kind plus the fields that kind needs."""
+
+    def __init__(self, kind, line, **fields):
+        self.kind = kind
+        self.line = line
+        self.__dict__.update(fields)
+
+
+def in_scope(rel):
+    return bool(IN_SCOPE_RE.fullmatch(rel.replace(os.sep, "/")))
+
+
+def mirror_path(subject, rel, ext):
+    """pdf/<rel> with the .md extension replaced by ext."""
+    return os.path.join(subject, "pdf", os.path.splitext(rel)[0] + ext)
+
+
+def dest_name(heading):
+    """PDF destination name of a heading or anchor: ASCII, one name per anchor_key."""
+    out = []
+    for byte in anchor_key(heading).encode("utf-8"):
+        char = chr(byte)
+        if char.isdigit() or "a" <= char <= "z":
+            out.append(char)
+        elif char == " ":
+            out.append("-")
+        else:
+            out.append(f".{byte:02x}")
+    return "".join(out) or "-"
+
+
+def escape_text(text):
+    return "".join(TEXT_ESCAPES.get(char, char) for char in text)
+
+
+def escape_url(url):
+    return re.sub(r"[%#&{}]", lambda m: "\\" + m.group(0), url)
+
+
+def find_template(subject):
+    """(path, is_fallback) of the preamble to use."""
+    own = os.path.join(subject, "_templates", "document.tex")
+    if os.path.isfile(own):
+        return own, False
+    return os.path.join(SKILL_DIR, "templates", "document.tex"), True
+
+
+def parse_frontmatter(lines):
+    """({key: value}, index of the first body line, error or None)."""
+    if not lines or lines[0].strip() != "---":
+        return {}, 0, None
+    fields = {}
+    for index in range(1, len(lines)):
+        line = lines[index]
+        if line.strip() in ("---", "..."):
+            return fields, index + 1, None
+        match = re.match(r"^([A-Za-z_][\w-]*):\s*(.*?)\s*$", line)
+        if match:
+            value = re.sub(r"\s+#.*$", "", match.group(2)).strip()
+            fields[match.group(1)] = value.strip("\"'")
+    return {}, 0, "frontmatter has no closing ---"
+
+
+class Converter:
+    def __init__(self, md_path, subject, tex_path, template_text):
+        self.md_path = os.path.abspath(md_path)
+        self.subject = os.path.abspath(subject)
+        self.rel = os.path.relpath(self.md_path, self.subject).replace(os.sep, "/")
+        self.md_dir = os.path.dirname(self.md_path)
+        self.tex_dir = os.path.dirname(os.path.abspath(tex_path))
+        self.allowed = BUILTIN_CHARS | {chr(int(h, 16)) for h in DECLARED_RE.findall(template_text)}
+        self.errors = []
+        self.notes = []
+        self.answers = []
+        self.local_dests = {}
+        self.used_labels = set()
+        self.mermaid_count = 0
+
+    # ---- problems ----
+
+    def error(self, line, message):
+        if (line, message) not in self.errors:  # nested lines are checked again by the inner block
+            self.errors.append((line, message))
+
+    def unsupported(self, line, what):
+        self.error(line, f"unsupported Markdown: {what}")
+
+    def check_chars(self, line, text, ascii_only=False):
+        bad = []
+        for char in text:
+            if (ord(char) > 0x7E if ascii_only else char not in self.allowed) and char not in bad and char != "\t":
+                bad.append(char)
+        for char in bad:
+            if ascii_only:
+                self.error(line, f"character '{char}' (U+{ord(char):04X}) in a code block: code blocks "
+                                 "must be plain ASCII")
+            else:
+                self.error(line, f"unsupported character '{char}' (U+{ord(char):04X}): write it as LaTeX math, "
+                                 "or allow it with \\DeclareUnicodeCharacter in _templates/document.tex")
+
+    # ---- block structure ----
+
+    def parse_blocks(self, entries, nested=False):
+        """entries: (line number, text) pairs; returns a list of Blocks."""
+        blocks = []
+        i = 0
+        while i < len(entries):
+            line, text = entries[i]
+            stripped = text.strip()
+            if not stripped:
+                i += 1
+                continue
+            fence = FENCE_RE.match(text)
+            if fence:
+                i = self.parse_fence(entries, i, fence, blocks)
+                continue
+            self.check_chars(line, text)
+            if stripped.startswith("$$"):
+                i = self.parse_math(entries, i, blocks)
+                continue
+            heading = HEADING_RE.match(text)
+            if heading:
+                level = len(heading.group(1))
+                if nested:
+                    self.unsupported(line, "heading inside a list or callout")
+                elif level > 4:
+                    self.unsupported(line, f"heading level {level}: use # to ####")
+                else:
+                    key = HEADING_RE.match(INLINE_CODE_RE.sub("", text))
+                    blocks.append(Block("heading", line, level=level, text=heading.group(2),
+                                        key=anchor_key(key.group(2) if key else heading.group(2))))
+                i += 1
+                continue
+            if HR_RE.match(text):
+                blocks.append(Block("hr", line))
+                i += 1
+                continue
+            if stripped.startswith(">"):
+                i = self.parse_callout(entries, i, blocks, nested)
+                continue
+            if "|" in text and i + 1 < len(entries) and "|" in entries[i + 1][1] \
+                    and DELIM_RE.match(entries[i + 1][1]):
+                i = self.parse_table(entries, i, blocks)
+                continue
+            if LIST_RE.match(text):
+                i = self.parse_list(entries, i, blocks)
+                continue
+            image = LINK_RE.fullmatch(stripped)
+            if image and image.group(1) == "!":
+                blocks.append(Block("image", line, alt=image.group(2), target=image.group(3)))
+                i += 1
+                continue
+            if i + 1 < len(entries) and SETEXT_RE.match(entries[i + 1][1]):
+                self.unsupported(entries[i + 1][0], "underlined (setext) heading: use ## Heading, "
+                                                    "or leave a blank line before ---")
+                i += 2
+                continue
+            if re.match(r"\[[^\]]+\]:\s", stripped):
+                self.unsupported(line, "link reference definition: use [text](target)")
+            elif stripped.startswith("\\begin{"):
+                self.unsupported(line, "LaTeX environment outside $$: put it inside a $$ block")
+            blocks.append(Block("para", line, text=stripped))
+            i += 1
+        return blocks
+
+    def parse_fence(self, entries, i, fence, blocks):
+        line = entries[i][0]
+        indent, marker, lang = len(fence.group(1)), fence.group(2), fence.group(3).lower()
+        body = []
+        j = i + 1
+        while j < len(entries):
+            close = FENCE_RE.match(entries[j][1])
+            if close and close.group(2)[0] == marker[0] and len(close.group(2)) >= len(marker) \
+                    and not close.group(3):
+                break
+            text = entries[j][1]
+            body.append((entries[j][0], text[min(indent, len(text) - len(text.lstrip())):]))
+            j += 1
+        if j == len(entries):
+            self.unsupported(line, f"code block opened with {marker} is never closed")
+            return j
+        blocks.append(Block("code", line, lang=lang, lines=body))
+        return j + 1
+
+    def parse_math(self, entries, i, blocks):
+        line, text = entries[i]
+        stripped = text.strip()
+        if len(stripped) > 4 and stripped.endswith("$$"):
+            blocks.append(Block("math", line, lines=[stripped]))
+            return i + 1
+        j = i + 1
+        while j < len(entries) and not entries[j][1].strip().endswith("$$"):
+            self.check_chars(*entries[j])
+            j += 1
+        if j == len(entries):
+            self.unsupported(line, "display math opened with $$ is never closed")
+            return j
+        self.check_chars(*entries[j])
+        lines = [stripped] + [entry[1] for entry in entries[i + 1:j]] + [entries[j][1].strip()]
+        blocks.append(Block("math", line, lines=lines))
+        return j + 1
+
+    def parse_callout(self, entries, i, blocks, nested):
+        line = entries[i][0]
+        quote = []
+        j = i
+        while j < len(entries) and entries[j][1].lstrip().startswith(">"):
+            text = entries[j][1].lstrip()[1:]
+            quote.append((entries[j][0], text[1:] if text.startswith(" ") else text))
+            j += 1
+        match = CALLOUT_RE.match(quote[0][1].strip())
+        if not match:
+            self.unsupported(line, "plain block quote: use a callout such as > [!note] Title")
+            return j
+        kind = match.group(1).strip().lower()
+        if kind not in CALLOUT_TYPES:
+            self.unsupported(line, f"callout type [!{match.group(1)}]: use one of {', '.join(CALLOUT_TYPES)}")
+            return j
+        blocks.append(Block("callout", line, type=kind, collapsed=match.group(2) == "-",
+                            title=match.group(3).strip(), body=self.parse_blocks(quote[1:], nested=True)))
+        return j
+
+    def parse_table(self, entries, i, blocks):
+        line = entries[i][0]
+        header = self.split_row(entries[i][1])
+        aligns = []
+        for cell in self.split_row(entries[i + 1][1]):
+            left, right = cell.startswith(":"), cell.endswith(":")
+            aligns.append("c" if left and right else "r" if right else "l")
+        rows = []
+        j = i + 2
+        while j < len(entries) and entries[j][1].strip() and "|" in entries[j][1]:
+            self.check_chars(*entries[j])
+            cells = self.split_row(entries[j][1])
+            if len(cells) > len(header):
+                self.unsupported(entries[j][0], f"table row with {len(cells)} cells under a header "
+                                                f"with {len(header)}")
+            rows.append((entries[j][0], (cells + [""] * len(header))[:len(header)]))
+            j += 1
+        if len(aligns) != len(header):
+            self.unsupported(line, "table delimiter row does not match the header's columns")
+            aligns = (aligns + ["l"] * len(header))[:len(header)]
+        blocks.append(Block("table", line, header=header, aligns=aligns, rows=rows))
+        return j
+
+    @staticmethod
+    def split_row(text):
+        row = text.strip()
+        if row.startswith("|"):
+            row = row[1:]
+        if row.endswith("|") and not row.endswith("\\|"):
+            row = row[:-1]
+        return [cell.strip().replace("\\|", "|") for cell in re.split(r"(?<!\\)\|", row)]
+
+    def parse_list(self, entries, i, blocks):
+        first_line, first = entries[i][0], LIST_RE.match(entries[i][1])
+        base = len(first.group(1))
+        ordered = first.group(2)[0].isdigit()
+        start = int(first.group(2)[:-1]) if ordered else 1
+        items = []
+        while i < len(entries):
+            line, text = entries[i]
+            match = LIST_RE.match(text)
+            if not match or HR_RE.match(text) or len(match.group(1)) != base \
+                    or match.group(2)[0].isdigit() != ordered:
+                break
+            content = match.group(3) or ""
+            if re.match(r"\[[ xX]\]\s", content):
+                self.unsupported(line, "task list item - [ ]")
+            indent = match.end(2) + 1
+            item = [(line, content)]
+            i += 1
+            blank = False
+            while i < len(entries):
+                text = entries[i][1]
+                if not text.strip():
+                    blank = True
+                    item.append((entries[i][0], ""))
+                    i += 1
+                    continue
+                spaces = len(text) - len(text.lstrip())
+                if spaces > base:  # nested list or continuation of this item
+                    item.append((entries[i][0], text[min(spaces, indent):]))
+                elif not blank and not LIST_RE.match(text) and not text.lstrip().startswith(
+                        (">", "|", "$$", "```", "~~~", "#")):
+                    item.append((entries[i][0], text.strip()))  # lazy continuation line
+                else:
+                    break
+                blank = False
+                i += 1
+            items.append(self.parse_blocks(item, nested=True))
+        blocks.append(Block("list", first_line, ordered=ordered, start=start, items=items))
+        return i
+
+    # ---- inline text ----
+
+    def inline(self, text, line):
+        """LaTeX for one line of Markdown text; math stays as written."""
+        store = []
+
+        def keep(latex, source):
+            store.append((latex, source))
+            return f"\x00{len(store) - 1}\x00"
+
+        def code(match):
+            body = match.group(2)
+            if body.startswith(" ") and body.endswith(" ") and body.strip():
+                body = body[1:-1]
+            return keep(r"\texttt{" + escape_text(body) + "}", match.group(0))
+
+        text = CODE_SPAN_RE.sub(code, text)
+        text = self.protect_math(text, line, keep)
+        for pattern, what in UNSUPPORTED:
+            if pattern.search(text):
+                self.unsupported(line, what)
+
+        def link(match):
+            if match.group(1) == "!":
+                self.unsupported(line, "image inside text: put ![alt](path) on its own line")
+                return keep("", match.group(0))
+            label = self.finish(match.group(2), store, keep)
+            target = PLACEHOLDER_RE.sub(lambda m: store[int(m.group(1))][1], match.group(3))
+            return keep(self.link(label, target, line), match.group(0))
+
+        text = LINK_RE.sub(link, text)
+        return self.finish(text, store, keep)
+
+    def protect_math(self, text, line, keep):
+        """Replace $...$ and backslash escapes by placeholders (scanned left to right)."""
+        out = []
+        i = 0
+        while i < len(text):
+            char = text[i]
+            if char == "\\" and i + 1 < len(text) and text[i + 1] in ASCII_PUNCT:
+                out.append(keep(escape_text(text[i + 1]), text[i:i + 2]))
+                i += 2
+                continue
+            if char == "$":
+                if text.startswith("$$", i):
+                    self.unsupported(line, "$$ inside a line: display math goes on its own lines")
+                    out.append(keep(r"\$\$", "$$"))
+                    i += 2
+                    continue
+                end = self.math_end(text, i)
+                if end is not None:
+                    out.append(keep(text[i:end + 1], text[i:end + 1]))
+                    i = end + 1
+                    continue
+                self.unsupported(line, "unmatched $: close the math, or write USD instead of a dollar sign")
+                out.append(keep(r"\$", "$"))
+                i += 1
+                continue
+            out.append(char)
+            i += 1
+        return "".join(out)
+
+    @staticmethod
+    def math_end(text, start):
+        """Index of the $ closing inline math that opens at start, or None."""
+        if start + 1 >= len(text) or text[start + 1].isspace():
+            return None
+        i = start + 1
+        while i < len(text):
+            if text[i] == "\\":
+                i += 2
+                continue
+            if text[i] == "$":
+                if text[i - 1].isspace() or (i + 1 < len(text) and text[i + 1].isdigit()):
+                    return None
+                return i
+            i += 1
+        return None
+
+    def finish(self, text, store, keep):
+        """Emphasis, escaping, then the placeholders put back."""
+        text = BOLD_ITALIC_RE.sub(lambda m: keep(r"\textbf{\emph{" + self.finish(m.group(1), store, keep) + "}}",
+                                                 m.group(0)), text)
+        text = BOLD_RE.sub(lambda m: keep(r"\textbf{" + self.finish(m.group(1), store, keep) + "}",
+                                          m.group(0)), text)
+        text = ITALIC_RE.sub(lambda m: keep(r"\emph{" + self.finish(m.group(1), store, keep) + "}",
+                                            m.group(0)), text)
+        text = escape_text(text)
+        while "\x00" in text:
+            text = PLACEHOLDER_RE.sub(lambda m: store[int(m.group(1))][0], text)
+        return text
+
+    def link(self, label, target, line):
+        if target.startswith("<") and target.endswith(">"):
+            target = target[1:-1]
+        if SCHEME_RE.match(target):
+            return rf"\href{{{escape_url(target)}}}{{{label}}}"
+        path, _, anchor = target.partition("#")
+        anchor = unquote(anchor).split("#")[-1]  # Obsidian's #Heading#Subheading: the last part
+        resolved = os.path.normpath(os.path.join(self.md_dir, unquote(path))) if path else self.md_path
+        if resolved == self.md_path:
+            if not anchor:
+                return label
+            dest = self.local_dests.get(anchor_key(anchor))
+            if dest is None:
+                self.error(line, f"link to a missing heading: #{anchor}")
+                return label
+            return rf"\hyperref[{dest}]{{{label}}}"
+        rel = os.path.relpath(resolved, self.subject)
+        if in_scope(rel):
+            href = self.from_tex(mirror_path(self.subject, rel, ".pdf"))
+            if anchor:
+                href += "#" + dest_name(anchor)
+            return rf"\href{{{escape_url(href)}}}{{{label}}}"
+        href = escape_url(self.from_tex(resolved))
+        page = re.fullmatch(r"page=(\d+)", anchor.strip())
+        if page and path.lower().endswith(".pdf"):
+            return rf"\href[page={page.group(1)}]{{{href}}}{{{label}}}"
+        return rf"\href{{{href}}}{{{label}}}"
+
+    def from_tex(self, path):
+        return os.path.relpath(path, self.tex_dir).replace(os.sep, "/")
+
+    # ---- rendering ----
+
+    def label(self, key):
+        """A unique \\label name for a heading key (the first one is what other files link to)."""
+        name = dest_name(key)
+        unique, n = name, 1
+        while unique in self.used_labels:
+            n += 1
+            unique = f"{name}:{n}"
+        self.used_labels.add(unique)
+        return unique
+
+    def heading_text(self, block):
+        """Heading LaTeX, with a plain bookmark text if it holds math, code or links."""
+        latex = self.inline(block.text, block.line)
+        plain = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", block.text)
+        plain = escape_text(re.sub(r"[$*`]", "", plain))
+        return latex if latex == plain else rf"\texorpdfstring{{{latex}}}{{{plain}}}"
+
+    def render_document(self, blocks, fields):
+        for block in blocks:
+            if block.kind == "heading":
+                block.label = self.label(block.key)
+                self.local_dests.setdefault(block.key, block.label)
+        parts = []
+        if fields.get("status") == "draft":
+            parts.append(r"\profengdrafttrue")
+        meta = []
+        if fields:
+            if fields.get("course"):
+                meta.append(fields["course"])
+            if fields.get("lecture"):
+                meta.append(f"Lecture {fields['lecture']}")
+            meta.append(f"built {datetime.date.today().isoformat()}")
+            self.check_chars(1, " · ".join(meta))
+        meta_tex = escape_text(" · ".join(meta))
+        titled = False
+        i = 0
+        while i < len(blocks):
+            block = blocks[i]
+            if block.kind != "heading":
+                j = i
+                while j < len(blocks) and blocks[j].kind != "heading":
+                    j += 1
+                if not titled:
+                    parts.append(rf"\profengtitle{{{escape_text(self.default_title())}}}{{{meta_tex}}}")
+                    titled = True
+                parts.append(self.render_blocks(blocks[i:j]))
+                i = j
+                continue
+            title = self.heading_text(block)
+            if block.level == 1:
+                if titled:
+                    parts.append(rf"\docpart{{{title}}}{{{block.label}}}")
+                else:
+                    parts.append(rf"\phantomsection\label{{{block.label}}}\profengtitle{{{title}}}{{{meta_tex}}}")
+                    titled = True
+                i += 1
+                continue
+            if not titled:
+                parts.append(rf"\profengtitle{{{escape_text(self.default_title())}}}{{{meta_tex}}}")
+                titled = True
+            box = ("recipecard" if RECIPE_RE.match(block.text)
+                   else "solutionbox" if SOLUTION_RE.match(block.text) else None)
+            if box:
+                j = i + 1
+                while j < len(blocks) and not (blocks[j].kind == "heading" and blocks[j].level <= block.level):
+                    j += 1
+                inner = [Block("subheading", b.line, text=b.text, label=b.label) if b.kind == "heading" else b
+                         for b in blocks[i + 1:j]]
+                parts.append(f"\\begin{{{box}}}{{{self.inline(block.text, block.line)}}}{{{block.label}}}\n"
+                             f"{self.render_blocks(inner, in_box=True)}\n\\end{{{box}}}")
+                i = j
+                continue
+            if block.level == 2 and block.text.strip().lower() == "solutions" and self.rel.startswith("solutions/"):
+                parts.append(r"\clearpage")  # statements first, then the solutions on a fresh page
+            parts.append(rf"\{SECTIONS[block.level]}{{{title}}}\label{{{block.label}}}")
+            i += 1
+        if not titled:
+            parts.append(rf"\profengtitle{{{escape_text(self.default_title())}}}{{{meta_tex}}}")
+        if self.answers:
+            parts.append(r"\section{Answers}")
+            for n, title, body in self.answers:
+                parts.append(f"\\begin{{docanswer}}{{{n}}}{{{title}}}\n{body}\n\\end{{docanswer}}")
+        return "\n\n".join(part for part in parts if part)
+
+    def default_title(self):
+        return os.path.splitext(os.path.basename(self.md_path))[0]
+
+    def render_blocks(self, blocks, in_box=False):
+        out = []
+        previous = None
+        for block in blocks:
+            latex = getattr(self, "render_" + block.kind)(block, in_box)
+            if block.kind == "math":
+                if previous is not None and previous.kind == "para" and out:
+                    out[-1] += "\n" + latex  # same paragraph: no page break before the display
+                else:
+                    out.append("\\noindent%\n" + latex)
+            elif latex:
+                out.append(latex)
+            previous = block
+        return "\n\n".join(out)
+
+    def render_para(self, block, in_box):
+        return self.inline(block.text, block.line)
+
+    def render_subheading(self, block, in_box):
+        return rf"\phantomsection\label{{{block.label}}}\textbf{{{self.inline(block.text, block.line)}}}"
+
+    def render_math(self, block, in_box):
+        return "\n".join(block.lines)
+
+    def render_hr(self, block, in_box):
+        return r"\docrule"
+
+    def render_list(self, block, in_box):
+        env = "enumerate" if block.ordered else "itemize"
+        start = f"[start={block.start}]" if block.ordered and block.start != 1 else ""
+        items = [r"\item{} " + self.render_blocks(item, in_box) for item in block.items]
+        return f"\\begin{{{env}}}{start}\n" + "\n".join(items) + f"\n\\end{{{env}}}"
+
+    def render_callout(self, block, in_box):
+        title = self.inline(block.title, block.line) if block.title else block.type.capitalize()
+        body = self.render_blocks(block.body, in_box=True)
+        if block.collapsed and block.type == "tip" and block.title.lower().startswith("answer"):
+            n = len(self.answers) + 1
+            answer_title = self.inline(re.sub(r"(?i)^answer", f"Answer {n}", block.title), block.line)
+            self.answers.append((n, answer_title, body))
+            return rf"\docanswerlink{{{n}}}"
+        if not body:
+            return rf"\calloutline{{{block.type}}}{{{title}}}"
+        return f"\\begin{{callout}}{{{block.type}}}{{{title}}}\n{body}\n\\end{{callout}}"
+
+    def render_image(self, block, in_box):
+        target = block.target[1:-1] if block.target.startswith("<") else block.target
+        if SCHEME_RE.match(target):
+            self.unsupported(block.line, "image from a URL: render it to a local file")
+            return ""
+        path = os.path.normpath(os.path.join(self.md_dir, unquote(target)))
+        if not os.path.isfile(path):
+            self.error(block.line, f"image not found: {target}")
+            return ""
+        rel = self.from_tex(path)
+        if re.search(r"[\s%#{}~^\\]", rel):
+            self.error(block.line, f"image path with a space or LaTeX special character: {target}")
+            return ""
+        return rf"\docfigure{{{rel}}}{{{self.inline(block.alt, block.line)}}}"
+
+    def render_code(self, block, in_box):
+        for line, text in block.lines:
+            self.check_chars(line, text, ascii_only=True)
+            if re.search(r"\\end\{(codebox|mermaidsource)\}", text):
+                self.unsupported(line, "\\end{codebox} inside a code block")
+        source = "\n".join(text for _, text in block.lines)
+        if block.lang == "mermaid":
+            drawing = self.draw_mermaid(source, block.line)
+            if drawing:
+                return rf"\docfigure{{{self.from_tex(drawing)}}}{{Diagram}}"
+            return f"\\begin{{mermaidsource}}\n{source}\n\\end{{mermaidsource}}"
+        language = LISTINGS.get(block.lang)
+        options = f"[language={language}]" if language else ""
+        return f"\\begin{{codebox}}{options}\n{source}\n\\end{{codebox}}"
+
+    def draw_mermaid(self, source, line):
+        """Draw a Mermaid block with mmdc into .prof-eng-build/mermaid/; the PDF path or None."""
+        mmdc = shutil.which("mmdc")
+        if not mmdc:
+            self.notes.append(f"{self.rel}:{line}: mmdc not installed, Mermaid shown as source")
+            return None
+        self.mermaid_count += 1
+        folder = os.path.join(self.subject, ".prof-eng-build", "mermaid")
+        os.makedirs(folder, exist_ok=True)
+        stem = os.path.join(folder, f"{os.path.splitext(self.rel)[0].replace('/', '-')}-{self.mermaid_count}")
+        with open(stem + ".mmd", "w", encoding="utf-8") as fh:
+            fh.write(source + "\n")
+        try:
+            result = subprocess.run([mmdc, "-q", "-i", stem + ".mmd", "-o", stem + ".pdf", "--pdfFit"],
+                                    capture_output=True, text=True, timeout=180)
+            ok = result.returncode == 0 and os.path.isfile(stem + ".pdf")
+        except (OSError, subprocess.TimeoutExpired):
+            ok = False
+        if not ok:
+            self.notes.append(f"{self.rel}:{line}: mmdc failed, Mermaid shown as source")
+            return None
+        return stem + ".pdf"
+
+    def render_table(self, block, in_box):
+        head = " & ".join(r"\textbf{" + self.inline(cell, block.line) + "}" if cell else ""
+                          for cell in block.header) + r" \\"
+        rows = "\n".join(" & ".join(self.inline(cell, line) for cell in cells) + r" \\"
+                         for line, cells in block.rows)
+        spec = self.table_spec(block)
+        if len(block.rows) > LONG_TABLE_ROWS and not in_box:
+            return (f"\\begin{{xltabular}}{{\\linewidth}}{{{spec}}}\n\\toprule\n{head}\n\\midrule\n\\endfirsthead\n"
+                    f"\\toprule\n{head}\n\\midrule\n\\endhead\n\\bottomrule\n\\endlastfoot\n{rows}\n"
+                    "\\end{xltabular}")
+        return (f"\\docshorttable{{\\begin{{tabularx}}{{\\linewidth}}{{{spec}}}\n\\toprule\n{head}\n\\midrule\n"
+                f"{rows}\n\\bottomrule\n\\end{{tabularx}}}}")
+
+    @staticmethod
+    def table_spec(block):
+        """Column types: wide columns wrap (X), the others keep their alignment (l, c, r)."""
+        def visible(cell):
+            cell = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", cell)
+            return len(re.sub(r"\\[A-Za-z]+|[{}$*`^_]", "", cell))
+
+        widths = [max([visible(block.header[c])] + [visible(cells[c]) for _, cells in block.rows])
+                  for c in range(len(block.header))]
+        wrap = [w > 24 for w in widths]
+        while sum(w for w, x in zip(widths, wrap) if not x) > 60:  # about the text width at 12pt
+            wrap[max((w, c) for c, (w, x) in enumerate(zip(widths, wrap)) if not x)[1]] = True
+        if not any(wrap):
+            wrap[widths.index(max(widths))] = True
+        xcol = {"l": r">{\raggedright\arraybackslash}X", "c": r">{\centering\arraybackslash}X",
+                "r": r">{\raggedleft\arraybackslash}X"}
+        return "".join(xcol[a] if x else a for a, x in zip(block.aligns, wrap))
+
+    # ---- whole file ----
+
+    def convert(self, text, template):
+        lines = text.lstrip("\ufeff").split("\n")
+        fields, first, problem = parse_frontmatter(lines)
+        if problem:
+            self.unsupported(1, problem)
+        entries = [(number + 1, lines[number].rstrip("\r").expandtabs(4)) for number in range(first, len(lines))]
+        body = self.render_document(self.parse_blocks(entries), fields)
+        header = (f"% Generated by md_to_tex.py from {self.rel}. Do not edit: change the .md for content "
+                  "and _templates/document.tex for layout.\n")
+        return template.replace("%%BODY%%", header + body)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Convert a prof-eng Markdown file to LaTeX.")
+    parser.add_argument("file")
+    parser.add_argument("--subject", default=".", help="subject folder (default: current directory)")
+    parser.add_argument("--out", help="output .tex (default: pdf/<same path>.tex in the subject)")
+    args = parser.parse_args()
+    subject = os.path.abspath(args.subject)
+    md = os.path.abspath(args.file)
+    if not os.path.isfile(md):
+        print(f"error: no such file: {args.file}", file=sys.stderr)
+        return 2
+    rel = os.path.relpath(md, subject)
+    if rel.startswith(".."):
+        print(f"error: {args.file} is not inside the subject folder {subject}", file=sys.stderr)
+        return 2
+    if not in_scope(rel):
+        print(f"error: {rel} has no PDF version (only notes, cheatsheets, exam and homework "
+              "solutions, EXAM-SHEET.md and EXAM-SHEET-print.md)", file=sys.stderr)
+        return 2
+    template_path, fallback = find_template(subject)
+    try:
+        with open(template_path, encoding="utf-8") as fh:
+            template = fh.read()
+    except OSError as exc:
+        print(f"error: cannot read template {template_path}: {exc}", file=sys.stderr)
+        return 2
+    if template.count("%%BODY%%") != 1:
+        print(f"error: {template_path} must contain the line %%BODY%% exactly once", file=sys.stderr)
+        return 2
+    if fallback:
+        print(f"note: _templates/document.tex is missing, using {template_path}", file=sys.stderr)
+    out = os.path.abspath(args.out) if args.out else mirror_path(subject, rel, ".tex")
+    with open(md, encoding="utf-8") as fh:
+        text = fh.read()
+    converter = Converter(md, subject, out, template)
+    tex = converter.convert(text, template)
+    for note in converter.notes:
+        print(f"note: {note}", file=sys.stderr)
+    if converter.errors:
+        for line, message in sorted(converter.errors, key=lambda e: e[0]):
+            print(f"{converter.rel}:{line}: {message}", file=sys.stderr)
+        return 1
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w", encoding="utf-8") as fh:
+        fh.write(tex)
+    print(f"wrote {os.path.relpath(out, subject)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

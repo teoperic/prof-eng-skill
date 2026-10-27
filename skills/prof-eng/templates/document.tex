@@ -26,7 +26,8 @@
 \usepackage{fancyhdr}
 \usepackage{lastpage}
 \usepackage[colorlinks,linkcolor=blue!50!black,urlcolor=blue!50!black,
-  filecolor=blue!50!black,citecolor=blue!50!black,bookmarksnumbered=false]{hyperref}
+  filecolor=blue!50!black,citecolor=blue!50!black,bookmarksnumbered=false,
+  destlabel]{hyperref}% destlabel: \label{x} names the PDF destination x, so other PDFs can link to it
 \linespread{\doclinespread}
 \makeatletter
 \AtBeginDocument{\typeout{prof-eng: fontsize=\f@size}}
@@ -179,6 +180,124 @@
   \includegraphics[width=0.85\linewidth,height=0.45\textheight,keepaspectratio]{#1}\par
   \vspace{0.2\baselineskip}{\small\color{black!65}#2\par}
   \end{minipage}\par}
+
+% ---- answers to self-test questions, collected at the end ----
+% \docanswerlink{n} stands where the hidden answer was; \begin{docanswer}{n}{Title} in the Answers section
+\newcommand{\docanswerlink}[1]{\par\nopagebreak[4]\phantomsection\label{q:#1}%
+  {\small\hyperref[ans:#1]{Answer #1, p.~\pageref*{ans:#1}}\par}}
+\newtcolorbox{docanswer}[2]{profeng/type=tip, title={#2\phantomsection\label{ans:#1}},
+  after upper={\par{\small\hyperref[q:#1]{Back to question, p.~\pageref*{q:#1}}}}}
+
+% ---- other blocks ----
+% \docrule: Markdown ---; \docpart{Title}{label}: a further # heading (print version: one per cheatsheet)
+\newcommand{\docrule}{\par\noindent\textcolor{black!35}{\rule{\linewidth}{0.4pt}}\par}
+\newcommand{\docpart}[2]{\clearpage\phantomsection\label{#2}%
+  \pdfbookmark[0]{#1}{bm:#2}\renewcommand{\profengshorttitle}{#1}%
+  {\LARGE\bfseries #1\par}\vspace{0.3\baselineskip}\hrule\vspace{0.6\baselineskip}}
+% Mermaid diagram that could not be drawn (mmdc not installed): its source
+\newtcblisting{mermaidsource}{enhanced, breakable, listing only, sharp corners,
+  colback=black!3, colframe=black!20, boxrule=0.4pt, left=4pt, right=4pt,
+  title={Diagram (Mermaid source, not drawn)}, fonttitle=\small, colbacktitle=black!10, coltitle=black,
+  before skip=0.5\baselineskip, after skip=0.6\baselineskip, profeng/needspace=4\baselineskip}
+
+% ---- Unicode: characters the Markdown may use, in text and inside $...$ ----
+% md_to_tex.py accepts ASCII, Latin-1, Latin Extended-A, common punctuation (– — ‘ ’ “ ” … € •)
+% and every character declared here; add a line here to allow another one.
+\DeclareUnicodeCharacter{00B5}{\TextOrMath{\textmu}{\mu}}% micro sign µ
+\DeclareUnicodeCharacter{00B0}{\TextOrMath{\textdegree}{^{\circ}}}
+\DeclareUnicodeCharacter{00B7}{\TextOrMath{\textperiodcentered}{\cdot}}
+\DeclareUnicodeCharacter{00D7}{\TextOrMath{\texttimes}{\times}}
+\DeclareUnicodeCharacter{00F7}{\TextOrMath{\textdiv}{\div}}
+\DeclareUnicodeCharacter{00B1}{\TextOrMath{\textpm}{\pm}}
+\DeclareUnicodeCharacter{00AC}{\TextOrMath{\textlnot}{\neg}}
+\DeclareUnicodeCharacter{00B9}{\TextOrMath{\textonesuperior}{^{1}}}
+\DeclareUnicodeCharacter{00B2}{\TextOrMath{\texttwosuperior}{^{2}}}
+\DeclareUnicodeCharacter{00B3}{\TextOrMath{\textthreesuperior}{^{3}}}
+\DeclareUnicodeCharacter{00BD}{\TextOrMath{\textonehalf}{\tfrac{1}{2}}}
+\DeclareUnicodeCharacter{00BC}{\TextOrMath{\textonequarter}{\tfrac{1}{4}}}
+\DeclareUnicodeCharacter{00BE}{\TextOrMath{\textthreequarters}{\tfrac{3}{4}}}
+\DeclareUnicodeCharacter{2070}{\TextOrMath{\textsuperscript{0}}{^{0}}}
+\DeclareUnicodeCharacter{2074}{\TextOrMath{\textsuperscript{4}}{^{4}}}
+\DeclareUnicodeCharacter{207B}{\TextOrMath{\textsuperscript{\textminus}}{^{-}}}% as in s⁻¹
+\DeclareUnicodeCharacter{2212}{\TextOrMath{\textminus}{-}}
+\DeclareUnicodeCharacter{2013}{\TextOrMath{\textendash}{-}}
+\DeclareUnicodeCharacter{2026}{\TextOrMath{\textellipsis}{\ldots}}
+\DeclareUnicodeCharacter{2126}{\ensuremath{\Omega}}% ohm sign Ω
+\DeclareUnicodeCharacter{2032}{\ensuremath{^{\prime}}}
+\DeclareUnicodeCharacter{2033}{\ensuremath{^{\prime\prime}}}
+\DeclareUnicodeCharacter{2190}{\ensuremath{\leftarrow}}
+\DeclareUnicodeCharacter{2191}{\ensuremath{\uparrow}}
+\DeclareUnicodeCharacter{2192}{\ensuremath{\rightarrow}}
+\DeclareUnicodeCharacter{2193}{\ensuremath{\downarrow}}
+\DeclareUnicodeCharacter{2194}{\ensuremath{\leftrightarrow}}
+\DeclareUnicodeCharacter{21D0}{\ensuremath{\Leftarrow}}
+\DeclareUnicodeCharacter{21D2}{\ensuremath{\Rightarrow}}
+\DeclareUnicodeCharacter{21D4}{\ensuremath{\Leftrightarrow}}
+\DeclareUnicodeCharacter{2200}{\ensuremath{\forall}}
+\DeclareUnicodeCharacter{2202}{\ensuremath{\partial}}
+\DeclareUnicodeCharacter{2203}{\ensuremath{\exists}}
+\DeclareUnicodeCharacter{2206}{\ensuremath{\Delta}}
+\DeclareUnicodeCharacter{2207}{\ensuremath{\nabla}}
+\DeclareUnicodeCharacter{2208}{\ensuremath{\in}}
+\DeclareUnicodeCharacter{2209}{\ensuremath{\notin}}
+\DeclareUnicodeCharacter{2211}{\ensuremath{\sum}}
+\DeclareUnicodeCharacter{220F}{\ensuremath{\prod}}
+\DeclareUnicodeCharacter{221A}{\ensuremath{\surd}}
+\DeclareUnicodeCharacter{221D}{\ensuremath{\propto}}
+\DeclareUnicodeCharacter{221E}{\ensuremath{\infty}}
+\DeclareUnicodeCharacter{2220}{\ensuremath{\angle}}
+\DeclareUnicodeCharacter{222B}{\ensuremath{\int}}
+\DeclareUnicodeCharacter{223C}{\ensuremath{\sim}}
+\DeclareUnicodeCharacter{2248}{\ensuremath{\approx}}
+\DeclareUnicodeCharacter{2260}{\ensuremath{\neq}}
+\DeclareUnicodeCharacter{2261}{\ensuremath{\equiv}}
+\DeclareUnicodeCharacter{2264}{\ensuremath{\leq}}
+\DeclareUnicodeCharacter{2265}{\ensuremath{\geq}}
+\DeclareUnicodeCharacter{226A}{\ensuremath{\ll}}
+\DeclareUnicodeCharacter{226B}{\ensuremath{\gg}}
+\DeclareUnicodeCharacter{2282}{\ensuremath{\subset}}
+\DeclareUnicodeCharacter{2286}{\ensuremath{\subseteq}}
+\DeclareUnicodeCharacter{22C5}{\ensuremath{\cdot}}
+\DeclareUnicodeCharacter{2713}{\ensuremath{\checkmark}}
+% Greek letters (the capitals that look like Latin letters are in T1 already)
+\DeclareUnicodeCharacter{03B1}{\ensuremath{\alpha}}
+\DeclareUnicodeCharacter{03B2}{\ensuremath{\beta}}
+\DeclareUnicodeCharacter{03B3}{\ensuremath{\gamma}}
+\DeclareUnicodeCharacter{03B4}{\ensuremath{\delta}}
+\DeclareUnicodeCharacter{03B5}{\ensuremath{\varepsilon}}
+\DeclareUnicodeCharacter{03F5}{\ensuremath{\epsilon}}
+\DeclareUnicodeCharacter{03B6}{\ensuremath{\zeta}}
+\DeclareUnicodeCharacter{03B7}{\ensuremath{\eta}}
+\DeclareUnicodeCharacter{03B8}{\ensuremath{\theta}}
+\DeclareUnicodeCharacter{03D1}{\ensuremath{\vartheta}}
+\DeclareUnicodeCharacter{03B9}{\ensuremath{\iota}}
+\DeclareUnicodeCharacter{03BA}{\ensuremath{\kappa}}
+\DeclareUnicodeCharacter{03BB}{\ensuremath{\lambda}}
+\DeclareUnicodeCharacter{03BC}{\ensuremath{\mu}}
+\DeclareUnicodeCharacter{03BD}{\ensuremath{\nu}}
+\DeclareUnicodeCharacter{03BE}{\ensuremath{\xi}}
+\DeclareUnicodeCharacter{03C0}{\ensuremath{\pi}}
+\DeclareUnicodeCharacter{03C1}{\ensuremath{\rho}}
+\DeclareUnicodeCharacter{03C2}{\ensuremath{\varsigma}}
+\DeclareUnicodeCharacter{03C3}{\ensuremath{\sigma}}
+\DeclareUnicodeCharacter{03C4}{\ensuremath{\tau}}
+\DeclareUnicodeCharacter{03C5}{\ensuremath{\upsilon}}
+\DeclareUnicodeCharacter{03C6}{\ensuremath{\varphi}}
+\DeclareUnicodeCharacter{03D5}{\ensuremath{\phi}}
+\DeclareUnicodeCharacter{03C7}{\ensuremath{\chi}}
+\DeclareUnicodeCharacter{03C8}{\ensuremath{\psi}}
+\DeclareUnicodeCharacter{03C9}{\ensuremath{\omega}}
+\DeclareUnicodeCharacter{0393}{\ensuremath{\Gamma}}
+\DeclareUnicodeCharacter{0394}{\ensuremath{\Delta}}
+\DeclareUnicodeCharacter{0398}{\ensuremath{\Theta}}
+\DeclareUnicodeCharacter{039B}{\ensuremath{\Lambda}}
+\DeclareUnicodeCharacter{039E}{\ensuremath{\Xi}}
+\DeclareUnicodeCharacter{03A0}{\ensuremath{\Pi}}
+\DeclareUnicodeCharacter{03A3}{\ensuremath{\Sigma}}
+\DeclareUnicodeCharacter{03A5}{\ensuremath{\Upsilon}}
+\DeclareUnicodeCharacter{03A6}{\ensuremath{\Phi}}
+\DeclareUnicodeCharacter{03A8}{\ensuremath{\Psi}}
+\DeclareUnicodeCharacter{03A9}{\ensuremath{\Omega}}
 
 \begin{document}
 %%BODY%%

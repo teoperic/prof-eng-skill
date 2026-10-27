@@ -57,6 +57,11 @@ def content_lines(path):
                 yield number, INLINE_CODE_RE.sub("", line.rstrip("\n"))
 
 
+def anchor_key(text):
+    """How a heading and a decoded link anchor are compared (md_to_tex.py uses it too)."""
+    return text.strip().casefold()
+
+
 _heading_cache = {}
 
 
@@ -66,7 +71,7 @@ def headings(path):
         for _, line in content_lines(path):
             match = HEADING_RE.match(line)
             if match:
-                found.add(match.group(2).strip().casefold())
+                found.add(anchor_key(match.group(2)))
         _heading_cache[path] = found
     return _heading_cache[path]
 
@@ -110,7 +115,7 @@ def check_target(source, target):
     if lower.endswith(".md"):
         known = headings(resolved)
         for part in anchor.split("#"):  # Obsidian allows #Heading#Subheading
-            if part.strip() and part.strip().casefold() not in known:
+            if part.strip() and anchor_key(part) not in known:
                 return "broken", f"no heading '{part.strip()}'"
     return "ok", ""
 
