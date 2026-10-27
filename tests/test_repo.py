@@ -90,6 +90,31 @@ class ExamSheetTemplateTest(unittest.TestCase):
             shutil.rmtree(tmp)
 
 
+class DocumentTemplateTest(unittest.TestCase):
+    TEX = os.path.join(SKILL, "templates", "document.tex")
+
+    def test_settings_block_at_top(self):
+        with open(self.TEX, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+        self.assertIn("SETTINGS: edit here", lines[0])
+        block = "\n".join(lines[:8])
+        for name in ("\\docfontsize", "\\docpaper", "\\docmargin", "\\doclinespread"):
+            self.assertIn(name, block)
+        self.assertIn("{12pt}", block)
+        self.assertIn("{a4paper}", block)
+        self.assertLess(
+            next(i for i, l in enumerate(lines) if "SETTINGS" in l),
+            next(i for i, l in enumerate(lines) if "\\documentclass" in l),
+        )
+
+    def test_body_placeholder(self):
+        with open(self.TEX, encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertEqual(text.count("%%BODY%%"), 1)
+        self.assertLess(text.index("\\begin{document}"), text.index("%%BODY%%"))
+        self.assertLess(text.index("%%BODY%%"), text.index("\\end{document}"))
+
+
 class NoCourseMaterialTest(unittest.TestCase):
     def test_no_pdfs_or_images_in_repo(self):
         found = []

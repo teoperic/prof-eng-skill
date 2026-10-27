@@ -1,0 +1,185 @@
+% ===================== SETTINGS: edit here =====================
+\newcommand{\docfontsize}{12pt}      % font size: 10pt, 11pt or 12pt
+\newcommand{\docpaper}{a4paper}      % paper size
+\newcommand{\docmargin}{25mm}        % page margins
+\newcommand{\doclinespread}{1.05}    % line spacing factor
+% ===============================================================
+% Layout preamble for the PDF versions of notes, cheatsheets, solutions and
+% the open-book exam index. md_to_tex.py fills in the body; the .tex it writes
+% is regenerated on every build, so change layout here and content in the .md.
+\edef\docclassoptions{\docfontsize,\docpaper}
+\expandafter\documentclass\expandafter[\docclassoptions]{article}
+\usepackage[margin=\docmargin,headheight=15pt,footskip=12mm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,mathtools,bm,cancel}
+\usepackage{graphicx}
+\usepackage[dvipsnames]{xcolor}
+\usepackage[most,listings]{tcolorbox}
+\usepackage{xltabular,booktabs}
+\usepackage{enumitem}
+\usepackage{needspace}
+\usepackage{titlesec}
+\usepackage{etoolbox}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage[colorlinks,linkcolor=blue!50!black,urlcolor=blue!50!black,
+  filecolor=blue!50!black,citecolor=blue!50!black,bookmarksnumbered=false]{hyperref}
+\linespread{\doclinespread}
+\makeatletter
+\AtBeginDocument{\typeout{prof-eng: fontsize=\f@size}}
+\makeatother
+
+% ---- page breaks: no widows/orphans, no stretched space, no lonely headings ----
+\clubpenalty=10000
+\makeatletter\@clubpenalty=10000\makeatother% LaTeX restores \clubpenalty from this after headings and lists
+\widowpenalty=10000
+\displaywidowpenalty=10000
+\predisplaypenalty=10000
+\brokenpenalty=10000
+\raggedbottom
+\setlength{\parindent}{0pt}
+\AtBeginDocument{\setlength{\parskip}{0.6\baselineskip}}% fixed, no plus/minus glue
+\setlist{itemsep=0.2\baselineskip,parsep=0pt,topsep=0pt,partopsep=0pt,
+  beginpenalty=10000}% a list stays on the page of the line that introduces it ("Steps:")
+\setlist[enumerate,1]{label=\arabic*.}
+
+% ---- headings: ## = \section, ### = \subsection, #### = \subsubsection ----
+% Unnumbered (the Markdown headings carry their own numbers) but bookmarked.
+\setcounter{secnumdepth}{0}
+\titleformat{\section}{\Large\bfseries}{}{0pt}{}
+\titleformat{\subsection}{\large\bfseries}{}{0pt}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{}{0pt}{}
+\titlespacing*{\section}{0pt}{1.4\baselineskip}{0.3\baselineskip}
+\titlespacing*{\subsection}{0pt}{1.1\baselineskip}{0.2\baselineskip}
+\titlespacing*{\subsubsection}{0pt}{0.9\baselineskip}{0.1\baselineskip}
+% \docneedspace{len}: start a new page unless len is left. Directly under a heading
+% (\if@nobreak) a break must not fall between the two, so if room is short it overfills
+% the page at a point where no break is allowed: TeX then breaks before the heading
+% and the heading moves to the next page together with what follows (the same trick
+% tcolorbox uses for its 'nobreak' handling). The overfill is len plus the page's
+% shrink, so shrinkable glue cannot absorb it, yet small enough to fit on the next page;
+% \@nobreak is set again because the empty paragraph of the trick clears it.
+\makeatletter
+\newdimen\doc@push
+\newcommand{\docneedspace}[1]{%
+  \par
+  \if@nobreak
+    \ifdim\dimexpr\pagegoal-\pagetotal\relax<#1\relax
+      \doc@push=\dimexpr#1+\pageshrink+1pt\relax
+      \vspace{\doc@push}{\parskip\z@\nointerlineskip\noindent}\vspace{-\doc@push}\par
+      \global\@nobreaktrue
+    \fi
+  \else
+    \Needspace{#1}%
+  \fi}
+\makeatother
+% A heading moves to the next page unless this much room is left under it.
+\pretocmd{\section}{\docneedspace{6\baselineskip}}{}{}
+\pretocmd{\subsection}{\docneedspace{4\baselineskip}}{}{}
+\pretocmd{\subsubsection}{\docneedspace{3\baselineskip}}{}{}
+
+% ---- title, footer, draft header ----
+\newif\ifprofengdraft
+\newcommand{\profengshorttitle}{}
+% \profengtitle{H1 text}{course · lecture · build date}: title block at the top
+\newcommand{\profengtitle}[2]{%
+  \renewcommand{\profengshorttitle}{#1}%
+  \hypersetup{pdftitle={#1}}%
+  {\LARGE\bfseries #1\par}%
+  \vspace{0.3\baselineskip}\hrule\vspace{0.3\baselineskip}%
+  \ifstrempty{#2}{}{{\small\color{black!65}#2\par}}%
+  \vspace{0.6\baselineskip}}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\fancyhead[C]{\ifprofengdraft\small\bfseries\color{BrickRed}DRAFT -- not reviewed\fi}
+\fancyfoot[L]{\small\profengshorttitle}
+\fancyfoot[R]{\small\thepage\ / \pageref*{LastPage}}
+
+% ---- callouts: white box, colored left bar, never split across pages ----
+% \begin{callout}{type}{Title} body \end{callout}; \calloutline{type}{Title} for title-only callouts
+\definecolor{co-blue}{RGB}{8,109,221}
+\definecolor{co-cyan}{RGB}{0,150,148}
+\definecolor{co-purple}{RGB}{120,82,238}
+\definecolor{co-orange}{RGB}{220,108,0}
+\colorlet{co-note}{co-blue}
+\colorlet{co-info}{co-blue}
+\colorlet{co-abstract}{co-cyan}
+\colorlet{co-important}{co-cyan}
+\colorlet{co-tip}{co-cyan}
+\colorlet{co-example}{co-purple}
+\colorlet{co-warning}{co-orange}
+\colorlet{co-question}{co-orange}
+\tcbset{
+  profeng/base/.style={enhanced, breakable=false, sharp corners, colback=white,
+    boxrule=0pt, leftrule=2.5pt, left=6pt, right=0pt, top=1pt, bottom=1pt,
+    boxsep=2pt, before skip=0.5\baselineskip, after skip=0.6\baselineskip,
+    fonttitle=\bfseries, colbacktitle=white, titlerule=0pt,
+    before upper={\setlength{\parskip}{0.4\baselineskip}}},
+  profeng/type/.style={profeng/base, colframe=co-#1, coltitle=co-#1!75!black},
+}
+\newtcolorbox{callout}[2]{profeng/type=#1, title={#2}}
+\newcommand{\calloutline}[2]{%
+  \begin{tcolorbox}[profeng/type=#1]\textbf{\color{co-#1!75!black}#2}\end{tcolorbox}}
+
+% ---- recipe cards and solutions: may split, but short ones move whole ----
+% \begin{recipecard}{R3 -- Step response}{label} ... \end{recipecard}; same for solutionbox
+% profeng/needspace=<len> runs \docneedspace before the box; it adds to the code that
+% 'before skip' sets ('before=' would replace it). Directly under a heading tcolorbox
+% skips that code and moves the heading itself if the box cannot start on the page,
+% but it also adds a \penalty0 there, which lets TeX break between heading and box:
+% make that a \nobreak.
+\makeatletter
+\tcbset{profeng/needspace/.code={\preto\kvtcb@beforebox{\par\docneedspace{#1}}}}
+\patchcmd{\tcb@prepare@break@operation}{\addpenalty\z@}{\iftcb@nobreak\nobreak\else\addpenalty\z@\fi}{}
+  {\typeout{prof-eng: could not patch tcolorbox, a heading may end a page above a box}}
+\makeatother
+\tcbset{
+  profeng/long/.style={enhanced, breakable, sharp corners, colback=white,
+    colframe=black!35, boxrule=0.4pt, left=6pt, right=6pt, top=3pt, bottom=3pt,
+    before skip=0.8\baselineskip, after skip=0.8\baselineskip,
+    fonttitle=\large\bfseries, colbacktitle=black!6, coltitle=black,
+    before upper={\setlength{\parskip}{0.5\baselineskip}},
+    pad at break=2pt,% the starred form lets tcolorbox squeeze boxes onto a full page
+    lines before break=6},% under a heading, less room moves heading and box to the next page
+}
+\newtcolorbox{recipecard}[2]{profeng/long, title={#1\phantomsection\label{#2}},
+  profeng/needspace=8\baselineskip}
+\newtcolorbox{solutionbox}[2]{profeng/long, title={#1\phantomsection\label{#2}},
+  profeng/needspace=8\baselineskip}
+
+% ---- code: verbatim box, may split ----
+% \begin{codebox}[language=Matlab] ... \end{codebox}
+\lstset{basicstyle=\small\ttfamily, columns=fullflexible, keepspaces=true,
+  breaklines=true, showstringspaces=false, upquote=true}
+\newtcblisting{codebox}[1][]{enhanced, breakable, listing only, sharp corners,
+  colback=black!3, colframe=black!20, boxrule=0.4pt, left=4pt, right=4pt,
+  before skip=0.5\baselineskip, after skip=0.6\baselineskip,
+  profeng/needspace=4\baselineskip, listing options={#1}}
+
+% ---- tables ----
+% short (unbreakable): \begin{tabularx}{\linewidth}{...} inside \docshorttable{...}
+% long (repeated header): \begin{xltabular}{\linewidth}{...} ... \endhead ... \end{xltabular}
+\renewcommand{\arraystretch}{1.2}
+\setlength{\LTpre}{0.4\baselineskip}
+\setlength{\LTpost}{0.4\baselineskip}
+% longtable forces a page break when its header and first row do not fit, which
+% strands a heading directly above it: make room first (moving the heading along).
+\AddToHook{env/xltabular/before}{\docneedspace{4\baselineskip}}
+\newcommand{\docshorttable}[1]{\par\vspace{0.2\baselineskip}\noindent#1\par\vspace{0.2\baselineskip}}
+
+% ---- images: no floats, alt text as a small caption line ----
+% \docfigure{relative/path.png}{Alt text}
+\newcommand{\docfigure}[2]{%
+  \par\noindent\begin{minipage}{\linewidth}\centering
+  \includegraphics[width=0.85\linewidth,height=0.45\textheight,keepaspectratio]{#1}\par
+  \vspace{0.2\baselineskip}{\small\color{black!65}#2\par}
+  \end{minipage}\par}
+
+\begin{document}
+%%BODY%%
+\end{document}
