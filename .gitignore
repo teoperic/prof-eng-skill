@@ -16,3 +16,7 @@ __pycache__/
 *.pyc
 .obsidian/
 .DS_Store
+
+# Working notes
+HANDOFF-pdf-output.md
+docs/
