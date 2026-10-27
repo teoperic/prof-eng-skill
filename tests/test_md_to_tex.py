@@ -27,6 +27,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, SCRIPTS)
 
 from make_fixtures import SAMPLES, make_subject, write_png, write_samples  # noqa: E402
+from test_document_tex import body_lines, compile_body  # noqa: E402
 import check_links  # noqa: E402
 import md_to_tex  # noqa: E402
 
@@ -148,6 +149,12 @@ class TextTest(TempSubjectTest):
         body = self.body("# T\n\nτ ≈ 1 ms – Ω, µF, 20 °C, ü, ß, “quoted” …\n")
         self.assertIn("τ ≈ 1 ms – Ω, µF, 20 °C, ü, ß, “quoted” …", body)
 
+    def test_straight_quotes_become_curly(self):
+        body = self.body('# T\n\nSays "1. Voltage" ("a", **"b"**, "$x$", "`c`") and [link "l"](#T).\n')
+        self.assertIn("Says “1. Voltage” (“a”, \\textbf{“b”}, “$x$”, “\\texttt{c}”) and "
+                      "\\hyperref[t]{link “l”}.", body)
+        self.assertIn('\\texttt{say "hi"}', self.body('# T\n\n`say "hi"`\n'))
+
     def test_unknown_character(self):
         _, errors = self.convert("# T\n\nDone ✅\n")
         self.assertEqual(len(errors), 1)
@@ -230,14 +237,29 @@ class TableTest(TempSubjectTest):
         self.assertEqual(spec, "l>{\\centering\\arraybackslash}Xr")
 
     def test_long_table_repeats_header(self):
-        body = self.body("# T\n\n## 1. Topic\n\n" + self.table(md_to_tex.LONG_TABLE_ROWS + 1))
+        body = self.body("# T\n\n## 1. Topic\n\n" + self.table(13))
         self.assertIn("\\begin{xltabular}{\\linewidth}", body)
         self.assertEqual(body.count("\\textbf{Formula}"), 2)
         self.assertIn("\\endfirsthead", body)
         self.assertIn("\\endhead", body)
+        # at least two rows on each side of a page break
+        self.assertIn("$x_0$ & meaning 0 | alias & \\hyperref[1.2e-topic]{1. Topic} \\\\*", body)
+        self.assertIn("$x_11$ & meaning 11 | alias & \\hyperref[1.2e-topic]{1. Topic} \\\\*", body)
+        self.assertEqual(body.count("\\\\*"), 2)
+
+    def test_height_counts_wrapped_lines(self):
+        def height(rows, text):
+            return sum(md_to_tex.Converter.table_layout(md_to_tex.Block(
+                "table", 1, header=["Formula", "Meaning"], aligns=["l", "l"],
+                rows=[(2, [f"$x_{n}$", text]) for n in range(rows)]))[1])
+
+        self.assertEqual(height(8, "short"), 9)
+        self.assertEqual(height(8, "a meaning long enough to wrap " * 4), 17)  # 120 characters: 2 lines each
+        body = self.body("# T\n\n| A | B |\n|---|---|\n" + ("| x | " + "wrap " * 30 + "|\n") * 7)
+        self.assertIn("xltabular", body)  # 7 rows, but 15 lines
 
     def test_long_table_in_box_stays_short(self):
-        rows = self.table(md_to_tex.LONG_TABLE_ROWS + 1).replace("\n|", "\n> |")
+        rows = self.table(13).replace("\n|", "\n> |")
         body = self.body("# T\n\n## 1. Topic\n\n> [!note] Table\n> " + rows)
         self.assertNotIn("xltabular", body)
 
@@ -265,18 +287,85 @@ class CalloutTest(TempSubjectTest):
         body = self.body("# T\n\n## Self-test\n1. Q one?\n\n> [!tip]- Answer\n> A one.\n\n"
                          "2. Q two?\n\n> [!tip]- Answer (short)\n> A two.\n\n## Slide coverage\nEnd.\n")
         self.assertIn("\\docanswerlink{1}", body)
-        self.assertIn("\\begin{enumerate}[start=2]", body)
+        self.assertIn("\\begin{enumerate}[start=2,beginpenalty=0,endpenalty=10000]", body)
         answers = body.index("\\section{Answers}")
         self.assertGreater(answers, body.index("\\section{Slide coverage}"))
         self.assertIn("\\begin{docanswer}{1}{Answer 1}\nA one.\n\\end{docanswer}", body[answers:])
         self.assertIn("\\begin{docanswer}{2}{Answer 2 (short)}\nA two.", body[answers:])
         self.assertNotIn("A one.", body[:answers])
 
+    def test_only_a_list_before_an_answer_keeps_with_it(self):
+        body = self.body("# T\n\n- A list.\n\nText.\n\n- Q?\n\n> [!tip]- Answer\n> A.\n")
+        self.assertEqual(body.count("endpenalty=10000"), 1)
+        self.assertIn("\\begin{itemize}[endpenalty=10000]\n\\item{} Q?", body)
+
     def test_unknown_type_and_plain_quote(self):
         _, errors = self.convert("# T\n\n> [!success] Done\n\n> plain quote\n")
         self.assertEqual(len(errors), 2, errors)
         self.assertIn("[!success]", errors[0])
         self.assertIn("plain block quote", errors[1])
+
+
+@unittest.skipUnless(shutil.which("pdflatex") and shutil.which("pdftotext"), "needs pdflatex and pdftotext")
+class KeepWithNextTest(TempSubjectTest):
+    """A block at the foot of a page stays on the page of the block it belongs to.
+
+    The converter's LaTeX for the pair is pushed down the page in 2pt steps, one
+    instance per page, as in test_document_tex.AfterHeadingTest.
+    """
+
+    def stranded(self, latex, first_word, second_word):
+        """Instances where the last line with first_word and the first line with second_word part."""
+        parts = [f"\\clearpage\n\\noindent Start\\par\\vspace*{{{top}pt}}\n" + latex.replace("@N@", str(n))
+                 for n, top in enumerate(range(500, 700, 2), 1)]
+        code, pdf, log = compile_body("\n\n".join(parts), self.subject, single_pass=True)
+        self.assertEqual(code, 0, log[-3000:])
+        groups = []
+        for lines in body_lines(pdf):
+            if lines and lines[0][0] == "Start":
+                groups.append([])
+            groups[-1].append(lines)
+        self.assertEqual(len(groups), 100)
+        out = []
+        for n, pages in enumerate(groups, 1):
+            first = max(i for i, lines in enumerate(pages) for words in lines if first_word in words)
+            second = min(i for i, lines in enumerate(pages) for words in lines if words[0] == second_word)
+            if first != second:
+                out.append(n)
+        return out
+
+    def test_answer_link_stays_with_its_question(self):
+        body = self.body("# T\n\n1. " + " ".join(["wordQ001"] * 40) + "\n\n> [!tip]- Answer\n> A.\n")
+        question = body[body.index("\\begin{enumerate}"):body.index("\\docanswerlink{1}") + 17]
+        self.assertEqual(self.stranded(question.replace("{1}", "{@N@}"), "wordQ001", "Answer"), [])
+
+    def test_long_self_test_breaks_between_questions(self):
+        # each question keeps its answer line, so the break must be allowed before the next question
+        questions = "".join(f"{n}. Question{n} " + "word " * 25 + "\n\n> [!tip]- Answer\n> A.\n\n"
+                            for n in range(1, 41))
+        code, pdf, log = compile_body(self.body("# T\n\n## Self-test\n" + questions), self.subject, single_pass=True)
+        self.assertEqual(code, 0, log[-3000:])
+        self.assertFalse("Overfull \\vbox" in log, "the Self-test section has no page break and overflows")
+        pages = [{w for words in lines for w in words} for lines in body_lines(pdf)]
+        self.assertIn("Question40", set().union(*pages[:-1]))  # all questions before the Answers section
+
+    def test_short_table_takes_its_lead_in_along(self):
+        rows = "".join(f"| Row{n} | value |\n" for n in range(6))
+        body = self.body("# T\n\n" + " ".join(["wordP001"] * 40) + "\n\n| Head | Value |\n|---|---|\n" + rows)
+        pair = body[body.index("wordP001"):body.index("\\end{tabularx}}") + 15]
+        self.assertEqual(self.stranded(pair, "wordP001", "Head"), [])
+
+    def test_long_table_takes_its_lead_in_along(self):
+        rows = "".join(f"| Row{n} | value |\n" for n in range(20))
+        body = self.body("# T\n\n" + " ".join(["wordP001"] * 40) + "\n\n| Head | Value |\n|---|---|\n" + rows)
+        pair = body[body.index("wordP001"):body.index("\\end{xltabular}") + 15]
+        self.assertEqual(self.stranded(pair, "wordP001", "Head"), [])
+
+    def test_heading_stays_with_long_table_of_wrapped_rows(self):
+        rows = "".join(f"| Row{n} | " + "wrapping cell text " * 12 + "|\n" for n in range(8))
+        body = self.body("# T\n\n## Headingword\n\n| Head | Value |\n|---|---|\n" + rows)
+        pair = body[body.index("\\section{Headingword}"):body.index("\\end{xltabular}") + 15]
+        self.assertEqual(self.stranded(pair, "Headingword", "Head"), [])
 
 
 class BoxTest(TempSubjectTest):
@@ -296,7 +385,7 @@ class BoxTest(TempSubjectTest):
         self.assertIn("\\subsection{Q1 (15 pts) – type R3}", body)
         self.assertIn("\\clearpage\n\n\\section{Solutions}", body)
         self.assertIn("\\begin{solutionbox}{Q1 solution}{q1-solution}", body)
-        self.assertIn("\\phantomsection\\label{remark}\\textbf{Remark}", body)
+        self.assertIn("\\leavevmode\\phantomsection\\label{remark}\\textbf{Remark}", body)
         self.assertEqual(body.count("\\begin{solutionbox}"), 2)
 
 
@@ -314,6 +403,10 @@ class LinkAndImageTest(TempSubjectTest):
                          "[note](L06-z.md)\n")
         self.assertIn("\\href{../cheatsheets/L07-cheatsheet.pdf\\#r3-.e2.80.93-step-response}{card}", body)
         self.assertIn("\\href{L06-z.pdf}{note}", body)
+
+    def test_target_with_parentheses(self):
+        body = self.body("# T\n\n[R1](../cheatsheets/L01-c.md#R1%20–%20Current%20(or%20voltage)) (see)\n")
+        self.assertIn("\\href{../cheatsheets/L01-c.pdf\\#r1-.e2.80.93-current-.28or-voltage.29}{R1} (see)", body)
 
     def test_from_subject_root(self):
         body = self.body("# Sheet\n\n[R3](cheatsheets/L07-cheatsheet.md#R3%20–%20Step) "
@@ -493,7 +586,7 @@ class CommandLineTest(TempSubjectTest):
         with open(os.path.join(self.subject, "pdf", "notes", "L07-x.tex"), encoding="utf-8") as fh:
             tex = fh.read()
         self.assertTrue(tex.startswith("% ===================== SETTINGS"))
-        self.assertIn("% Generated by md_to_tex.py from notes/L07-x.md.", tex)
+        self.assertRegex(tex, r"% Generated by md_to_tex\.py \(converter [0-9a-f]{12}\) from notes/L07-x\.md\.")
         self.assertNotIn("%%BODY%%", tex)
 
     def test_subject_template_and_out(self):

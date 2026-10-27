@@ -139,6 +139,7 @@ class CheckLinksTest(TempDirTest):
             # L01 – Intro
             ## Core content
             ### 2. Partial fractions
+            ### 3. Step response (2nd order)
             Text.
         """)
         return root
@@ -154,6 +155,7 @@ class CheckLinksTest(TempDirTest):
             [note](../notes/L01-intro.md)
             [section](../notes/L01-intro.md#2.%20Partial%20fractions)
             [case](../notes/L01-intro.md#2.%20partial%20FRACTIONS)
+            [parentheses](../notes/L01-intro.md#3.%20Step%20response%20(2nd%20order)) (after a link)
             [slide 3](../slides/L01.pdf#page=3)
             ![Slide 2](../notes/img/L01-s2.png)
             [web](https://example.com) [mail](mailto:a@b.c)

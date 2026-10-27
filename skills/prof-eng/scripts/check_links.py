@@ -26,7 +26,9 @@ from slide_pages import page_count  # noqa: E402
 
 SKIP_DIRS = {"_templates", ".prof-eng-work", ".obsidian", ".git", ".trash",
              "slides", "exams", "homework", "book"}
-LINK_RE = re.compile(r"(!?)\[((?:[^\[\]]|\[[^\[\]]*\])*)\]\(\s*(<[^>]*>|[^)\s]+)(?:\s+\"[^\"]*\")?\s*\)")
+# a bare target may hold balanced parentheses: an anchor to the heading "R1 – Current (or voltage)"
+LINK_RE = re.compile(r"(!?)\[((?:[^\[\]]|\[[^\[\]]*\])*)\]\(\s*(<[^>]*>|(?:[^()\s]|\([^()\s]*\))+)"
+                     r"(?:\s+\"[^\"]*\")?\s*\)")
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
 INLINE_CODE_RE = re.compile(r"(`+)(?:(?!\1).)+?\1")
 HEADING_RE = re.compile(r"^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$")

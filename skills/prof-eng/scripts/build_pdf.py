@@ -16,8 +16,9 @@ is copied to pdf/<same path>.pdf. Then the layout is checked:
   intentional \\clearpage (usually a callout, table or figure that did not fit
   below).
 --stale builds only files whose PDF is missing or older than the .md or the
-document template (_templates/document.tex); with files given, only the stale
-ones among them. --all builds every file with a PDF version.
+document template (_templates/document.tex), or whose .tex came from another
+version of md_to_tex.py (its header names the converter version); with files
+given, only the stale ones among them. --all builds every file with a PDF version.
 
 Output: one line per file, `<file.md>: ok | layout-warnings | failed |
 not-compiled`, then its problems and notes indented. Line numbers in compile
@@ -34,7 +35,7 @@ import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
-from md_to_tex import find_template, in_scope, mirror_path  # noqa: E402
+from md_to_tex import CONVERTER_RE, converter_version, find_template, in_scope, mirror_path  # noqa: E402
 
 HBOX_LIMIT_PT = 2.0
 FILL_MIN = 0.6  # a shorter page before a non-intentional break is reported
@@ -85,7 +86,14 @@ def is_stale(subject, rel, template):
     if not os.path.isfile(pdf):
         return True
     newest = max(os.path.getmtime(os.path.join(subject, rel)), os.path.getmtime(template))
-    return os.path.getmtime(pdf) < newest
+    if os.path.getmtime(pdf) < newest:
+        return True
+    try:  # built by another version of the converter (the skill was updated)
+        with open(mirror_path(subject, rel, ".tex"), encoding="utf-8") as fh:
+            match = CONVERTER_RE.search(fh.read())
+    except OSError:
+        return True
+    return not match or match.group(1) != converter_version()
 
 
 def excerpt(tex_lines, first, last=None, width=110):
@@ -313,7 +321,7 @@ def main():
         else:
             results.append((rel, None, None))
     if not results:
-        say("nothing to build: every PDF is newer than its .md and the document template")
+        say("nothing to build: every PDF is newer than its .md and the document template, and was built by this version of the skill")
         return 0
 
     tool = latex_tool()

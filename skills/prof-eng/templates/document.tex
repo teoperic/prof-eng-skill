@@ -191,8 +191,10 @@
 
 % ---- answers to self-test questions, collected at the end ----
 % \docanswerlink{n} stands where the hidden answer was; \begin{docanswer}{n}{Title} in the Answers section
-\newcommand{\docanswerlink}[1]{\par\nopagebreak[4]\phantomsection\label{q:#1}%
-  {\small\hyperref[ans:#1]{Answer #1, p.~\pageref*{ans:#1}}\par}}
+% The anchor goes inside the paragraph: in vertical mode its whatsits would make the
+% \parskip after them a page break, and the line would leave its question.
+\newcommand{\docanswerlink}[1]{\par\nopagebreak[4]%
+  {\small\leavevmode\phantomsection\label{q:#1}\hyperref[ans:#1]{Answer #1, p.~\pageref*{ans:#1}}\par}}
 \newtcolorbox{docanswer}[2]{profeng/type=tip, title={#2\phantomsection\label{ans:#1}},
   after upper={\par{\small\hyperref[q:#1]{Back to question, p.~\pageref*{q:#1}}}}}
 
