@@ -169,7 +169,7 @@ Run `check_links.py .` and `check_coverage.py .` and summarize the results (coun
 Rebuilds PDFs from the existing Markdown. A script run: no extraction, no sub-agents.
 
 1. Subject folder only (rule 1); no conventions gate. If `output_format` is not `pdf`, say that PDF output is off and that `output_format: pdf` in `CLAUDE.md` turns it on, and stop.
-2. No argument → `build_pdf.py --stale` (PDF missing, or older than its `.md` or the document template); `all` → `build_pdf.py --all`; a file → `build_pdf.py <file>`.
+2. No argument → `build_pdf.py --stale` (PDF missing, older than its `.md` or the document template, or built by an older version of the skill); `all` → `build_pdf.py --all`; a file → `build_pdf.py <file>`.
 3. Record the results in `progress.md` (rule 16).
 4. Report each file's status and problems. Change no `.md` on your own: for `failed` or `layout-warnings`, show the fixes rule 16 allows and ask whether to apply them. If yes, apply them, rebuild (at most 3 rounds), and update `progress.md`.
 
@@ -187,7 +187,7 @@ Fill in the `<…>` parts and pass the whole prompt to the Agent tool. Give path
 >
 > Inputs: the slide extractions in `<subject>/.prof-eng-work/<Lxx>/` (chunk files and, if present, `book.md`), the slide PDF `<pdf>` (read pages with the Read tool, at most 15 per call, if an extraction is unclear), the subject conventions in `<subject>/CLAUDE.md`, the template `<subject>/_templates/lecture-note.md`, and the rules in `<SKILL_DIR>/references/formatting.md`. Rendered images available: `<list of notes/img/... files, or "none">`. Convention decisions: `<one-off items to mark in the note>`.
 >
-> Write `<subject>/notes/<Lxx-slug>.md`. Plan the outline first (topics in slide order), then write it section by section: definitions, derivations step by step in the course's notation, the slides' worked examples, `[slide N](../slides/<file>.pdf#page=N)` links, figure descriptions with the rendered image under each complex figure, a Formula box, 3–5 self-test questions with collapsed answers, related lectures, and the `## Slide coverage` table covering every slide. Mark content from the book and added context as formatting.md shows. Do not solve homework. Aim for 10–25k characters. *(PDF)* A PDF is built from this file: stay within the Markdown subset in the "PDF output" section of formatting.md, and redraw simple figures as tables rather than Mermaid.
+> Write `<subject>/notes/<Lxx-slug>.md`. Plan the outline first (topics in slide order), then write it section by section: definitions, derivations step by step in the course's notation, the slides' worked examples, `[slide N](../slides/<file>.pdf#page=N)` links, figure descriptions with the rendered image under each complex figure, a Formula box, 3–5 self-test questions with collapsed answers, related lectures (link only notes that already exist in `<subject>/notes/`; name later lectures in plain text), and the `## Slide coverage` table covering every slide. Mark content from the book and added context as formatting.md shows. Do not solve homework. Aim for 10–25k characters. *(PDF)* A PDF is built from this file: stay within the Markdown subset in the "PDF output" section of formatting.md, and redraw simple figures as tables rather than Mermaid.
 >
 > When done, reply with: the file written, its length in characters, and a list of anything you were unsure about (slide numbers).
 

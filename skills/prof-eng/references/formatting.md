@@ -5,6 +5,7 @@ These rules apply to every file the skill writes in a subject folder. The subjec
 ## Markdown and callouts
 
 - YAML frontmatter at the top of notes and solution files, exactly the fields in the template.
+- Lines `%% … %%` in a template are instructions for filling it: follow them and leave them out of the file.
 - Callout types in use: `note`, `abstract`, `important`, `example`, `warning`, `question`, `info`, `tip`. A collapsed callout adds `-` (`> [!tip]- Answer`).
 - One callout per idea, a few lines at most. A callout is a highlight, not a container for a whole section.
 - Tables for anything with columns (notation, formula boxes, coverage, catalogs).
@@ -123,6 +124,6 @@ How the PDF differs from the Markdown:
 - Links still work. A link to another file with a PDF opens that PDF at the same heading; a slide or book link opens the source PDF at that page (in desktop viewers such as Okular, Evince, Acrobat and Skim). Links within the file jump to the heading.
 - Collapsed `> [!tip]- Answer` callouts move to an "Answers" section at the end. In their place stands "Answer n, p. x", linked to the answer, and each answer links back to its question. Other collapsed callouts are shown open.
 - Headings `R<n> – <title>` become recipe-card boxes and `Q<n> solution` headings become solution boxes. Solution files start `## Solutions` on a new page.
-- Callouts and tables of up to 15 rows never split across pages, so a callout taller than a page runs off its bottom (a layout warning): keep callouts short (as above) and tables inside callouts shorter still. Longer tables outside a callout may split and repeat their header on each page. Recipe cards, solution boxes and code blocks may split.
+- Callouts and short tables (up to about a quarter page, wrapped lines counted) never split across pages, so a callout taller than a page runs off its bottom (a layout warning): keep callouts short (as above) and tables inside callouts shorter still. Taller tables outside a callout may split, with at least two rows on each side, and repeat their header on each page. A table moves to the next page together with the last lines of the paragraph just above it, and an "Answer n" line stays on the page of its question. Recipe cards, solution boxes and code blocks may split.
 - A Mermaid block is drawn if `mmdc` is installed; otherwise the PDF shows its source. So redraw simple figures as tables rather than Mermaid.
 - Files with `status: draft` (notes and solutions) carry a "DRAFT – not reviewed" header on every page.
