@@ -44,7 +44,7 @@ Copy-Item -Recurse $HOME\prof-eng-skill\skills\prof-eng $HOME\.claude\skills\pro
 
 If `/prof-eng` does not show up, restart Claude Code.
 
-**Update:** run `git pull` in `~/prof-eng-skill`. Symlink installs update immediately; Windows copy installs must copy the folder again. After an update, `/prof-eng status` in each subject reports version or template drift. Your `_templates/` are never overwritten.
+**Update:** run `git pull` in `~/prof-eng-skill`. Symlink installs update immediately; Windows copy installs must copy the folder again. Subject folders keep no copies of the skill's templates, so the next run in every subject uses the updated ones. After an update, `/prof-eng status` reports a newer skill version, `/prof-eng init` adds any new settings, and `/prof-eng pdf` rebuilds the PDFs.
 
 ## Quick start
 
@@ -98,7 +98,7 @@ If you choose "Markdown + PDF" at `init` (or later set `output_format: pdf` in t
 - 12pt on A4, with page breaks that keep headings with their text, callouts and short tables in one piece, and equations with the sentence that introduces them.
 - Links stay clickable: slide links open the slide PDF at that page, and links to other notes or cheatsheets open their PDF at that heading. Self-test answers move to an "Answers" section at the end, with page references for paper.
 - The Markdown stays the source. Each PDF is rebuilt from it after every run that changes the file; `/prof-eng pdf` rebuilds missing or outdated PDFs without using Claude for the content.
-- To change the layout, edit the settings block at the top of `_templates/document.tex` in the subject folder (font size, paper, margins, line spacing), then run `/prof-eng pdf`. Never edit the generated `.tex` files in `pdf/`; they are overwritten on every build.
+- Never edit the generated `.tex` files in `pdf/`; they are overwritten on every build.
 
 Without LaTeX, the skill still writes the `.tex` files and `/prof-eng status` lists them as not compiled. You can compile them in Overleaf: upload the `.tex` together with the images it uses (`notes/img/`, `solutions/img/`, and `.prof-eng-build/mermaid/` for drawn diagrams), keeping the same folder layout.
 

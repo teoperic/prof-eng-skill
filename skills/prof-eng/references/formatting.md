@@ -92,14 +92,14 @@ Bad (multiline math inside a callout, `\tag`, `align` without `$$`):
 
 ## LaTeX notes sheet (`exam-sheet/exam-sheet.tex`)
 
-- Built from `_templates/exam-sheet.tex`; keep its settings block at the very top (font size, line spacing, columns, paper).
+- Built from the skill's `templates/exam-sheet.tex`; keep its settings block at the very top (font size, line spacing, columns, paper).
 - 2 or 3 columns (`multicols*`, read top to bottom, then left to right), chronological by lecture: `\lecture{L07}{Laplace transform}` then that lecture's formulas and short definitions.
 - Math copied from the notes must compile in plain LaTeX: no Obsidian-only syntax, no callouts, no links, no images, no Markdown. Lecture references are plain text ("L07 §2").
 - Escape LaTeX special characters in text (`%`, `&`, `_`, `#`).
 
 ## PDF output
 
-Only with `output_format: pdf` in `CLAUDE.md` (SKILL.md rule 16). The `.md` stays the source: `build_pdf.py` converts it to LaTeX and compiles it. Never write or edit the `.tex`; it is regenerated on every build. Change content in the `.md` and layout in `_templates/document.tex` (font size, paper, margins and line spacing are in its settings block at the top).
+Only with `output_format: pdf` in `CLAUDE.md` (SKILL.md rule 16). The `.md` stays the source: `build_pdf.py` converts it to LaTeX and compiles it. Never write or edit the `.tex`; it is regenerated on every build. Change content in the `.md`. The layout (12pt, A4, margins, line spacing) comes from the skill's `templates/document.tex` and is the same for every subject.
 
 Files and folders:
 
@@ -117,7 +117,7 @@ Supported Markdown (everything else stops the build with a `file:line` error):
 - Fenced code blocks, plain ASCII only, with an optional language tag (`matlab`, `python`, …), and Mermaid blocks.
 - Relative links and `http(s)` links.
 
-Not supported: wikilinks and embeds, plain `>` quotes, other callout types, `==highlight==`, `~~strikethrough~~`, `_italic_` (use `*italic*`), footnotes, HTML and HTML comments, autolinks `<https://…>` (use `[text](url)`), `%%` comments, task lists `- [ ]`, reference links `[text][ref]`, underlined (setext) headings, `#####` and deeper, headings inside a list or callout, images inside a sentence or from a URL, image paths with spaces, `$$` inside a line of text, LaTeX environments outside `$$`, and characters that are neither built into pdflatex nor declared in the template (for example Chinese, emoji, rare symbols). Write a symbol as LaTeX math (`$\alpha$`) or add a `\DeclareUnicodeCharacter` line to `_templates/document.tex`; Greek letters and common math symbols such as `τ`, `≤` and `×` are already declared.
+Not supported: wikilinks and embeds, plain `>` quotes, other callout types, `==highlight==`, `~~strikethrough~~`, `_italic_` (use `*italic*`), footnotes, HTML and HTML comments, autolinks `<https://…>` (use `[text](url)`), `%%` comments, task lists `- [ ]`, reference links `[text][ref]`, underlined (setext) headings, `#####` and deeper, headings inside a list or callout, images inside a sentence or from a URL, image paths with spaces, `$$` inside a line of text, LaTeX environments outside `$$`, and characters that are neither built into pdflatex nor declared in the template (for example Chinese, emoji, rare symbols). Write such a symbol as LaTeX math (`$\alpha$`); Greek letters and common math symbols such as `τ`, `≤` and `×` are already declared.
 
 How the PDF differs from the Markdown:
 
