@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build the PDF versions of prof-eng Markdown files and check their layout.
 
-Usage: build_pdf.py <file.md>... [--subject DIR]
-       build_pdf.py --stale [<file.md>...] [--subject DIR]
-       build_pdf.py --all [--subject DIR]
+Usage: build_pdf.py <file.md>... [--subject DIR] [--template FILE]
+       build_pdf.py --stale [<file.md>...] [--subject DIR] [--template FILE]
+       build_pdf.py --all [--subject DIR] [--template FILE]
 
 Files with a PDF version: see md_to_tex.py. For each file, md_to_tex.py writes
 pdf/<same path>.tex, latexmk -pdf (or pdflatex, rerun until the references
@@ -16,9 +16,10 @@ is copied to pdf/<same path>.pdf. Then the layout is checked:
   intentional \\clearpage (usually a callout, table or figure that did not fit
   below).
 --stale builds only files whose PDF is missing or older than the .md or the
-document template (_templates/document.tex), or whose .tex came from another
-version of md_to_tex.py (its header names the converter version); with files
-given, only the stale ones among them. --all builds every file with a PDF version.
+document template (the skill's templates/document.tex, or --template FILE, a
+preamble for testing a layout change), or whose .tex came from another version
+of md_to_tex.py (its header names the converter version); with files given,
+only the stale ones among them. --all builds every file with a PDF version.
 
 Output: one line per file, `<file.md>: ok | layout-warnings | failed |
 not-compiled`, then its problems and notes indented. Line numbers in compile
@@ -35,7 +36,7 @@ import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
-from md_to_tex import CONVERTER_RE, converter_version, find_template, in_scope, mirror_path  # noqa: E402
+from md_to_tex import CONVERTER_RE, TEMPLATE, converter_version, in_scope, mirror_path  # noqa: E402
 
 HBOX_LIMIT_PT = 2.0
 FILL_MIN = 0.6  # a shorter page before a non-intentional break is reported
@@ -257,10 +258,11 @@ def check_pages(pages, top, height, marks, forced):
 
 # ---- one file ----
 
-def build(subject, rel, tool):
+def build(subject, rel, tool, template=TEMPLATE):
     """(status, detail lines) for one Markdown file."""
     md = os.path.join(subject, rel)
-    convert = subprocess.run([sys.executable, os.path.join(SCRIPT_DIR, "md_to_tex.py"), md, "--subject", subject],
+    convert = subprocess.run([sys.executable, os.path.join(SCRIPT_DIR, "md_to_tex.py"), md, "--subject", subject,
+                              "--template", template],
                              capture_output=True, text=True, errors="replace", timeout=600)
     details = [line for line in convert.stderr.splitlines() if line.strip()]
     if convert.returncode:
@@ -294,6 +296,8 @@ def main():
     parser = argparse.ArgumentParser(description="Build and check the PDF versions of prof-eng Markdown files.")
     parser.add_argument("files", nargs="*", help="Markdown files (paths relative to the current directory)")
     parser.add_argument("--subject", default=".", help="subject folder (default: current directory)")
+    parser.add_argument("--template", default=TEMPLATE,
+                        help="LaTeX preamble (default: the skill's templates/document.tex)")
     which = parser.add_mutually_exclusive_group()
     which.add_argument("--stale", action="store_true", help="only files whose PDF is missing or out of date")
     which.add_argument("--all", action="store_true", help="every file with a PDF version")
@@ -307,7 +311,7 @@ def main():
         rels = [os.path.relpath(os.path.abspath(f), subject).replace(os.sep, "/") for f in args.files]
     else:
         rels = scope_files(subject)
-    template, fallback = find_template(subject)
+    template = os.path.abspath(args.template)
 
     results = []
     for rel in rels:
@@ -328,15 +332,11 @@ def main():
     counts = {}
     for rel, status, details in results:
         if status is None:
-            status, details = build(subject, rel, tool)
-        if fallback:
-            details = [d for d in details if not d.startswith("note: _templates/document.tex is missing")]
+            status, details = build(subject, rel, tool, template)
         counts[status] = counts.get(status, 0) + 1
         say(f"{rel}: {status}")
         for line in details:
             say(line, indent=2)
-    if fallback:
-        say(f"note: _templates/document.tex is missing, used {template}")
     if "not-compiled" in counts:
         say(NO_LATEX)
     say(f"{len(results)} file{'s' if len(results) != 1 else ''}: "

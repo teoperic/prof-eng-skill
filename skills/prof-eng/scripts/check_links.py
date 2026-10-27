@@ -13,8 +13,9 @@ For every .md file (code fences and inline code are skipped):
 http(s), mailto and other URL schemes are ignored.
 
 Output: `file:line -> target: reason`. Exit code 1 if anything is broken.
-Folders skipped: _templates, .prof-eng-work, .obsidian, .git and the source
-folders slides, exams, homework, book.
+Folders skipped: _templates (template copies left by skill versions before 1.1),
+.prof-eng-work, .obsidian, .git and the source folders slides, exams, homework,
+book.
 """
 import os
 import re
